@@ -18,7 +18,8 @@ dependencies:
   intl: ^0.20.2
   font_awesome_flutter: ^10.7.0
   photo_manager_image_provider: ^2.2.0
-
+  just_audio_background: ^0.0.1-beta.17
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter

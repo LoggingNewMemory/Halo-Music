@@ -48,10 +48,15 @@ class PlayerUI extends StatelessWidget {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  // MIGRATION: Use AssetEntityImage
                   child: AssetEntityImage(
                     song,
-                    isOriginal: true, // Use higher quality for player
+                    // FIX: Changed to false.
+                    // True = tries to load MP3 as Image (Fails).
+                    // False = tries to load embedded Artwork/Thumbnail (Works).
+                    isOriginal: false,
+                    thumbnailSize: const ThumbnailSize.square(
+                      500,
+                    ), // Request higher quality thumb
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
                       return const Icon(
@@ -72,7 +77,6 @@ class PlayerUI extends StatelessWidget {
               stream: provider.audioPlayer.positionStream,
               builder: (context, snapshot) {
                 final position = snapshot.data ?? Duration.zero;
-                // MIGRATION: Duration is seconds
                 final total = Duration(seconds: song.duration);
 
                 final currentSeconds = position.inSeconds.toDouble();
