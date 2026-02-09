@@ -1,3 +1,4 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:on_audio_query/on_audio_query.dart';
@@ -27,7 +28,7 @@ class PlayerUI extends StatelessWidget {
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            // Song Name
+            // --- Song Title ---
             Text(
               song.title,
               style: Theme.of(context).textTheme.headlineSmall,
@@ -36,7 +37,7 @@ class PlayerUI extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 8),
-            // Artist Name
+            // --- Artist ---
             Text(
               song.artist ?? "Unknown Artist",
               style: Theme.of(
@@ -48,7 +49,7 @@ class PlayerUI extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Artwork
+            // --- Artwork ---
             AspectRatio(
               aspectRatio: 1,
               child: Container(
@@ -58,13 +59,12 @@ class PlayerUI extends StatelessWidget {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  // FIX: High quality Artwork Widget
                   child: QueryArtworkWidget(
                     id: song.id,
                     type: ArtworkType.AUDIO,
                     artworkHeight: 500,
                     artworkWidth: 500,
-                    size: 1000, // Request higher resolution
+                    size: 1000,
                     quality: 100,
                     keepOldArtwork: true,
                     nullArtworkWidget: const Icon(
@@ -79,9 +79,9 @@ class PlayerUI extends StatelessWidget {
 
             const Spacer(),
 
-            // Progress Bar
+            // --- Progress Bar ---
             StreamBuilder<Duration>(
-              stream: provider.audioPlayer.positionStream,
+              stream: AudioService.position,
               builder: (context, snapshot) {
                 final position = snapshot.data ?? Duration.zero;
                 final total = Duration(milliseconds: song.duration ?? 0);
@@ -101,9 +101,8 @@ class PlayerUI extends StatelessWidget {
                       value: sliderValue,
                       max: sliderMax,
                       onChanged: (value) {
-                        provider.audioPlayer.seek(
-                          Duration(seconds: value.toInt()),
-                        );
+                        // FIX: Now calling the provider's seek method
+                        provider.seek(Duration(seconds: value.toInt()));
                       },
                     ),
                     Padding(
@@ -123,7 +122,7 @@ class PlayerUI extends StatelessWidget {
 
             const SizedBox(height: 20),
 
-            // Controls
+            // --- Controls ---
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -153,7 +152,7 @@ class PlayerUI extends StatelessWidget {
 
             const Spacer(),
 
-            // Up Next
+            // --- Up Next ---
             Container(
               padding: const EdgeInsets.all(16),
               width: double.infinity,
@@ -166,8 +165,10 @@ class PlayerUI extends StatelessWidget {
                   Text(l10n.upNext, style: const TextStyle(color: Colors.grey)),
                   const SizedBox(height: 5),
                   Text(
-                    provider.songs.length > provider.currentIndex + 1
-                        ? (provider.songs[provider.currentIndex + 1].title)
+                    (provider.songs.isNotEmpty &&
+                            provider.currentSong != null &&
+                            provider.songs.indexOf(provider.currentSong!) + 1 < provider.songs.length)
+                        ? provider.songs[provider.songs.indexOf(provider.currentSong!) + 1].title
                         : "-",
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     maxLines: 1,

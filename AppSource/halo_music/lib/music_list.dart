@@ -19,6 +19,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize songs after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<AudioProvider>(context, listen: false).initSongs();
     });
@@ -84,7 +85,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
                           height: 50,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(4),
-                            // FIX: Use QueryArtworkWidget for reliable Audio Art
                             child: QueryArtworkWidget(
                               id: song.id,
                               type: ArtworkType.AUDIO,
@@ -110,6 +110,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
                         ),
                         trailing: Text(_formatDuration(song.duration ?? 0)),
                         onTap: () {
+                          // This calls AudioHandler.skipToQueueItem(index)
                           provider.playSong(index);
                           Navigator.push(
                             context,
@@ -134,7 +135,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
-              // Trigger init again to request permission
               Provider.of<AudioProvider>(context, listen: false).initSongs();
             },
             child: const Text("Grant Permissions"),

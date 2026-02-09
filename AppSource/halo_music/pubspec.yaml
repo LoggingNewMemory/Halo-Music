@@ -1,5 +1,5 @@
 name: halo_music
-description: "A Music Player, Build With Flutter. Nothing too Special Unless You Like The Design and Features"
+description: "A Music Player, Build With Flutter."
 publish_to: 'none'
 version: 0.1.0
 
@@ -11,14 +11,19 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  just_audio: ^0.10.5 
-  just_audio_background: ^0.0.1-beta.17
+  
+  # Audio Stack
+  just_audio: ^0.9.36
+  audio_service: ^0.18.12 
   on_audio_query: ^2.9.0
+  
+  # Utils
   provider: ^6.1.1
   permission_handler: ^11.3.0
   intl: ^0.20.2
   font_awesome_flutter: ^10.7.0
-  
+  rxdart: ^0.27.7 
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
