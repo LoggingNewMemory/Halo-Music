@@ -9,13 +9,21 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  just_audio: ^0.10.5 
+  photo_manager: ^3.2.0
+  permission_handler: ^11.3.0
+  provider: ^6.1.1
+  intl: ^0.20.2
+  font_awesome_flutter: ^10.7.0
+  photo_manager_image_provider: ^2.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
-  font_awesome_flutter: ^10.12.0
 
 flutter_launcher_icons:
   android: "launcher_icon"
@@ -26,11 +34,10 @@ flutter_launcher_icons:
 
   adaptive_icon_foreground: "assets/logo.png"
   adaptive_icon_background: "#FFFFFF"
-  
+
 flutter:
   uses-material-design: true
+  generate: true
 
 assets:
  - assets/*
-
- 
