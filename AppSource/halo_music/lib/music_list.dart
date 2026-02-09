@@ -20,7 +20,10 @@ class _MusicListScreenState extends State<MusicListScreen> {
   @override
   void initState() {
     super.initState();
-    Provider.of<AudioProvider>(context, listen: false).initSongs();
+    // Use addPostFrameCallback to ensure context is valid
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<AudioProvider>(context, listen: false).initSongs();
+    });
   }
 
   @override
@@ -69,8 +72,10 @@ class _MusicListScreenState extends State<MusicListScreen> {
           ),
 
           Expanded(
-            child: provider.songs.isEmpty
-                ? Center(child: Text(l10n.permissionDenied))
+            child: !provider.hasPermission
+                ? _buildPermissionDeniedView(l10n)
+                : provider.songs.isEmpty
+                ? Center(child: Text(l10n.noSongsFound))
                 : ListView.builder(
                     itemCount: provider.songs.length,
                     itemBuilder: (context, index) {
@@ -81,7 +86,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
                           height: 50,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(4),
-                            // MIGRATION: Use AssetEntityImage
                             child: AssetEntityImage(
                               song,
                               isOriginal: false,
@@ -97,13 +101,10 @@ class _MusicListScreenState extends State<MusicListScreen> {
                           ),
                         ),
                         title: Text(
-                          song.title ??
-                              "Unknown Title", // AssetEntity title can be nullable
+                          song.title ?? "Unknown Title",
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        // MIGRATION: AssetEntity does not have artist/album metadata.
-                        // We display the file type or duration as subtitle instead.
                         subtitle: Text(
                           song.mimeType ?? "Audio",
                           maxLines: 1,
@@ -126,13 +127,30 @@ class _MusicListScreenState extends State<MusicListScreen> {
     );
   }
 
+  Widget _buildPermissionDeniedView(AppLocalizations l10n) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(l10n.permissionDenied),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              PhotoManager.openSetting();
+            },
+            child: const Text("Open Settings"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _topButton(
     BuildContext context,
     String text,
     IconData icon, {
     VoidCallback? onTap,
   }) {
-    // Wrap in Material/InkWell for tap effect
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -146,7 +164,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
   }
 
   String _formatDuration(int seconds) {
-    // MIGRATION: Input is now Seconds (int), not Milliseconds
     final duration = Duration(seconds: seconds);
     return "${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}";
   }

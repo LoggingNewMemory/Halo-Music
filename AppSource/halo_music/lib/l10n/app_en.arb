@@ -11,5 +11,6 @@
   "general": "General",
   "theme": "Theme",
   "about": "About",
-  "permissionDenied": "Storage permission is required to list music."
+  "permissionDenied": "Storage permission is required to list music.",
+  "noSongsFound": "No songs found"
 }

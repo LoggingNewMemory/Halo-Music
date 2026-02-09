@@ -3,9 +3,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:photo_manager/photo_manager.dart'; // MIGRATION: New import
+import 'package:photo_manager/photo_manager.dart';
+import 'dart:io';
 
-// Note: You will need to update this file to handle AssetEntity instead of SongModel
 import 'music_list.dart';
 
 void main() {
@@ -46,15 +46,16 @@ class HaloMusicApp extends StatelessWidget {
 class AudioProvider extends ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
 
-  // MIGRATION: Changed from SongModel to AssetEntity
   List<AssetEntity> _songs = [];
   int _currentIndex = -1;
   bool _isPlaying = false;
+  bool _hasPermission = true; // Track permission state
 
   AudioPlayer get audioPlayer => _audioPlayer;
   List<AssetEntity> get songs => _songs;
   int get currentIndex => _currentIndex;
   bool get isPlaying => _isPlaying;
+  bool get hasPermission => _hasPermission;
 
   AssetEntity? get currentSong =>
       _currentIndex != -1 ? _songs[_currentIndex] : null;
@@ -76,36 +77,49 @@ class AudioProvider extends ChangeNotifier {
   }
 
   Future<void> initSongs() async {
-    // MIGRATION: PhotoManager handles permissions (including Android 13+)
-    final PermissionState ps = await PhotoManager.requestPermissionExtend();
+    // FIX: Explicitly request AUDIO permissions.
+    // Without this, it defaults to Common (Image/Video), causing failures on Android 13+
+    // if only READ_MEDIA_AUDIO is in the manifest.
+    final PermissionState ps = await PhotoManager.requestPermissionExtend(
+      requestOption: const PermissionRequestOption(
+        androidPermission: AndroidPermission(
+          type: RequestType.audio,
+          mediaLocation: false,
+        ),
+      ),
+    );
 
+    // FIX: Do not auto-open settings. Just update state.
     if (!ps.isAuth) {
-      // Handle permission denied: Open settings or show dialog
-      PhotoManager.openSetting();
+      _hasPermission = false;
+      notifyListeners();
       return;
     }
 
-    // MIGRATION: Fetch audio albums (paths) first
+    _hasPermission = true;
+
+    // Fetch audio albums (paths)
     final List<AssetPathEntity> paths = await PhotoManager.getAssetPathList(
       type: RequestType.audio,
     );
 
-    if (paths.isEmpty) return;
+    if (paths.isEmpty) {
+      _songs = [];
+      notifyListeners();
+      return;
+    }
 
     // Usually the first path is "Recent" or "All"
     final AssetPathEntity path = paths.first;
 
-    // Fetch total count to get all assets
     final int count = await path.assetCountAsync;
 
-    // Fetch assets (paginated usually, but getting all here for simplicity)
     final List<AssetEntity> assets = await path.getAssetListRange(
       start: 0,
       end: count,
     );
 
-    // MIGRATION: Filter duration.
-    // AssetEntity duration is in SECONDS. Your original check was > 10000ms (10s).
+    // Filter duration > 10 seconds
     _songs = assets.where((e) => e.duration > 10).toList();
 
     notifyListeners();
@@ -115,12 +129,9 @@ class AudioProvider extends ChangeNotifier {
     _currentIndex = index;
     try {
       final song = _songs[index];
-
-      // MIGRATION: Must await .file to get the IO File object
       final file = await song.file;
 
       if (file != null) {
-        // Load file path into just_audio
         await _audioPlayer.setAudioSource(AudioSource.file(file.path));
         _audioPlayer.play();
       }

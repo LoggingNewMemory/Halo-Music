@@ -171,6 +171,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage permission is required to list music.'**
   String get permissionDenied;
+
+  /// No description provided for @noSongsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No songs found'**
+  String get noSongsFound;
 }
 
 class _AppLocalizationsDelegate

@@ -47,4 +47,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get permissionDenied =>
       'Storage permission is required to list music.';
+
+  @override
+  String get noSongsFound => 'No songs found';
 }
