@@ -3,8 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:photo_manager/photo_manager.dart';
-import 'dart:io';
+import 'package:on_audio_query/on_audio_query.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'music_list.dart';
 
@@ -45,19 +45,20 @@ class HaloMusicApp extends StatelessWidget {
 // State Management
 class AudioProvider extends ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final OnAudioQuery _audioQuery = OnAudioQuery();
 
-  List<AssetEntity> _songs = [];
+  List<SongModel> _songs = [];
   int _currentIndex = -1;
   bool _isPlaying = false;
-  bool _hasPermission = true; // Track permission state
+  bool _hasPermission = false;
 
   AudioPlayer get audioPlayer => _audioPlayer;
-  List<AssetEntity> get songs => _songs;
+  List<SongModel> get songs => _songs;
   int get currentIndex => _currentIndex;
   bool get isPlaying => _isPlaying;
   bool get hasPermission => _hasPermission;
 
-  AssetEntity? get currentSong =>
+  SongModel? get currentSong =>
       _currentIndex != -1 ? _songs[_currentIndex] : null;
 
   AudioProvider() {
@@ -77,50 +78,40 @@ class AudioProvider extends ChangeNotifier {
   }
 
   Future<void> initSongs() async {
-    // FIX: Explicitly request AUDIO permissions.
-    // Without this, it defaults to Common (Image/Video), causing failures on Android 13+
-    // if only READ_MEDIA_AUDIO is in the manifest.
-    final PermissionState ps = await PhotoManager.requestPermissionExtend(
-      requestOption: const PermissionRequestOption(
-        androidPermission: AndroidPermission(
-          type: RequestType.audio,
-          mediaLocation: false,
-        ),
-      ),
-    );
+    // Request permissions using permission_handler
+    // Android 13+ needs AUDIO, older needs STORAGE
+    var statusAudio = await Permission.audio.status;
+    var statusStorage = await Permission.storage.status;
 
-    // FIX: Do not auto-open settings. Just update state.
-    if (!ps.isAuth) {
-      _hasPermission = false;
-      notifyListeners();
-      return;
+    if (!statusAudio.isGranted && !statusStorage.isGranted) {
+      // Request both to cover different Android versions
+      Map<Permission, PermissionStatus> statuses = await [
+        Permission.audio,
+        Permission.storage,
+      ].request();
+
+      if (statuses[Permission.audio] == PermissionStatus.granted ||
+          statuses[Permission.storage] == PermissionStatus.granted) {
+        _hasPermission = true;
+      } else {
+        _hasPermission = false;
+        notifyListeners();
+        return;
+      }
+    } else {
+      _hasPermission = true;
     }
 
-    _hasPermission = true;
-
-    // Fetch audio albums (paths)
-    final List<AssetPathEntity> paths = await PhotoManager.getAssetPathList(
-      type: RequestType.audio,
+    // Fetch songs using OnAudioQuery
+    List<SongModel> fetchedSongs = await _audioQuery.querySongs(
+      sortType: SongSortType.DATE_ADDED,
+      orderType: OrderType.DESC_OR_GREATER,
+      uriType: UriType.EXTERNAL,
+      ignoreCase: true,
     );
 
-    if (paths.isEmpty) {
-      _songs = [];
-      notifyListeners();
-      return;
-    }
-
-    // Usually the first path is "Recent" or "All"
-    final AssetPathEntity path = paths.first;
-
-    final int count = await path.assetCountAsync;
-
-    final List<AssetEntity> assets = await path.getAssetListRange(
-      start: 0,
-      end: count,
-    );
-
-    // Filter duration > 10 seconds
-    _songs = assets.where((e) => e.duration > 10).toList();
+    // Filter duration > 10 seconds (10000 ms) and remove non-music types if necessary
+    _songs = fetchedSongs.where((e) => (e.duration ?? 0) > 10000).toList();
 
     notifyListeners();
   }
@@ -129,12 +120,9 @@ class AudioProvider extends ChangeNotifier {
     _currentIndex = index;
     try {
       final song = _songs[index];
-      final file = await song.file;
-
-      if (file != null) {
-        await _audioPlayer.setAudioSource(AudioSource.file(file.path));
-        _audioPlayer.play();
-      }
+      // OnAudioQuery provides the direct path in song.data
+      await _audioPlayer.setAudioSource(AudioSource.file(song.data));
+      _audioPlayer.play();
     } catch (e) {
       debugPrint("Error playing audio: $e");
     }

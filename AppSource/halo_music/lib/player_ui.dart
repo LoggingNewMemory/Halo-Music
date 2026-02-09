@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:photo_manager/photo_manager.dart';
-import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
+import 'package:on_audio_query/on_audio_query.dart';
 
 import 'l10n/app_localizations.dart';
 import 'main.dart';
@@ -30,8 +29,19 @@ class PlayerUI extends StatelessWidget {
           children: [
             // Song Name
             Text(
-              song.title ?? "Unknown Title",
+              song.title,
               style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            // Artist Name
+            Text(
+              song.artist ?? "Unknown Artist",
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -48,23 +58,20 @@ class PlayerUI extends StatelessWidget {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  child: AssetEntityImage(
-                    song,
-                    // FIX: Changed to false.
-                    // True = tries to load MP3 as Image (Fails).
-                    // False = tries to load embedded Artwork/Thumbnail (Works).
-                    isOriginal: false,
-                    thumbnailSize: const ThumbnailSize.square(
-                      500,
-                    ), // Request higher quality thumb
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.music_note,
-                        size: 100,
-                        color: Colors.grey,
-                      );
-                    },
+                  // FIX: High quality Artwork Widget
+                  child: QueryArtworkWidget(
+                    id: song.id,
+                    type: ArtworkType.AUDIO,
+                    artworkHeight: 500,
+                    artworkWidth: 500,
+                    size: 1000, // Request higher resolution
+                    quality: 100,
+                    keepOldArtwork: true,
+                    nullArtworkWidget: const Icon(
+                      Icons.music_note,
+                      size: 100,
+                      color: Colors.grey,
+                    ),
                   ),
                 ),
               ),
@@ -77,7 +84,7 @@ class PlayerUI extends StatelessWidget {
               stream: provider.audioPlayer.positionStream,
               builder: (context, snapshot) {
                 final position = snapshot.data ?? Duration.zero;
-                final total = Duration(seconds: song.duration);
+                final total = Duration(milliseconds: song.duration ?? 0);
 
                 final currentSeconds = position.inSeconds.toDouble();
                 final totalSeconds = total.inSeconds.toDouble();
@@ -160,8 +167,7 @@ class PlayerUI extends StatelessWidget {
                   const SizedBox(height: 5),
                   Text(
                     provider.songs.length > provider.currentIndex + 1
-                        ? (provider.songs[provider.currentIndex + 1].title ??
-                              "-")
+                        ? (provider.songs[provider.currentIndex + 1].title)
                         : "-",
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     maxLines: 1,

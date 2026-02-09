@@ -12,13 +12,12 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   just_audio: ^0.10.5 
-  photo_manager: ^3.2.0
-  permission_handler: ^11.3.0
+  just_audio_background: ^0.0.1-beta.17
+  on_audio_query: ^2.9.0
   provider: ^6.1.1
+  permission_handler: ^11.3.0
   intl: ^0.20.2
   font_awesome_flutter: ^10.7.0
-  photo_manager_image_provider: ^2.2.0
-  just_audio_background: ^0.0.1-beta.17
   
 dev_dependencies:
   flutter_test:
@@ -32,7 +31,6 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   image_path: "assets/logo.png"
   min_sdk_android: 21
-
   adaptive_icon_foreground: "assets/logo.png"
   adaptive_icon_background: "#FFFFFF"
 
@@ -41,4 +39,4 @@ flutter:
   generate: true
 
 assets:
- - assets/*
+ - assets/

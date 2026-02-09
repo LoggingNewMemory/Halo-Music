@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:photo_manager/photo_manager.dart';
-import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
+import 'package:on_audio_query/on_audio_query.dart';
 
 import 'l10n/app_localizations.dart';
 import 'main.dart';
@@ -20,7 +19,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
   @override
   void initState() {
     super.initState();
-    // Use addPostFrameCallback to ensure context is valid
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<AudioProvider>(context, listen: false).initSongs();
     });
@@ -86,31 +84,31 @@ class _MusicListScreenState extends State<MusicListScreen> {
                           height: 50,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(4),
-                            child: AssetEntityImage(
-                              song,
-                              isOriginal: false,
-                              thumbnailSize: const ThumbnailSize.square(100),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Colors.grey[300],
-                                  child: const Icon(Icons.music_note),
-                                );
-                              },
+                            // FIX: Use QueryArtworkWidget for reliable Audio Art
+                            child: QueryArtworkWidget(
+                              id: song.id,
+                              type: ArtworkType.AUDIO,
+                              nullArtworkWidget: Container(
+                                color: Colors.grey[300],
+                                child: const Icon(
+                                  Icons.music_note,
+                                  color: Colors.black54,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                         title: Text(
-                          song.title ?? "Unknown Title",
+                          song.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
-                          song.mimeType ?? "Audio",
+                          song.artist ?? "Unknown Artist",
                           maxLines: 1,
                           style: const TextStyle(fontSize: 12),
                         ),
-                        trailing: Text(_formatDuration(song.duration)),
+                        trailing: Text(_formatDuration(song.duration ?? 0)),
                         onTap: () {
                           provider.playSong(index);
                           Navigator.push(
@@ -136,9 +134,10 @@ class _MusicListScreenState extends State<MusicListScreen> {
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
-              PhotoManager.openSetting();
+              // Trigger init again to request permission
+              Provider.of<AudioProvider>(context, listen: false).initSongs();
             },
-            child: const Text("Open Settings"),
+            child: const Text("Grant Permissions"),
           ),
         ],
       ),
@@ -163,8 +162,8 @@ class _MusicListScreenState extends State<MusicListScreen> {
     );
   }
 
-  String _formatDuration(int seconds) {
-    final duration = Duration(seconds: seconds);
+  String _formatDuration(int milliseconds) {
+    final duration = Duration(milliseconds: milliseconds);
     return "${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}";
   }
 }
