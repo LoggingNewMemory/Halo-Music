@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -7,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart'; // NEW IMPORT
 
 import 'music_list.dart';
 
@@ -24,6 +27,7 @@ Future<void> main() async {
         androidNotificationChannelName: 'Music Playback',
         androidNotificationOngoing: true,
         androidStopForegroundOnPause: true,
+        androidShowNotificationBadge: true,
       ),
     );
   } catch (e) {
@@ -88,16 +92,20 @@ class HaloMusicApp extends StatelessWidget {
 
 class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final _player = AudioPlayer();
+  final _audioQuery = OnAudioQuery(); // Internal query instance for artwork
 
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
     // Sync the current song from the Queue to the Notification.
-    // We use the queue index to ensure the metadata (Title/Artist) matches perfectly.
     _player.currentIndexStream.listen((index) {
       if (index != null && queue.value.isNotEmpty) {
         if (index >= 0 && index < queue.value.length) {
-          mediaItem.add(queue.value[index]);
+          final newItem = queue.value[index];
+          mediaItem.add(newItem);
+
+          // TRIGGER STANDALONE ARTWORK LOGIC
+          _updateNotificationWithArtwork(newItem);
         }
       }
     });
@@ -107,6 +115,44 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         skipToNext();
       }
     });
+  }
+
+  /// STANDALONE LOGIC:
+  /// Manually extracts artwork bytes -> Writes to temp file -> Updates Notification
+  /// This fixes the issue where special characters break the system content URI.
+  Future<void> _updateNotificationWithArtwork(MediaItem item) async {
+    try {
+      final int songId = int.parse(item.id);
+
+      // 1. Get the Application Cache Directory
+      final tempDir = await getTemporaryDirectory();
+      final File artworkFile = File('${tempDir.path}/notification_cover.jpg');
+
+      // 2. Query the raw artwork bytes specifically for this ID
+      // We use ArtworkType.AUDIO to target the song ID directly
+      final Uint8List? bytes = await _audioQuery.queryArtwork(
+        songId,
+        ArtworkType.AUDIO,
+        format: ArtworkFormat.JPEG,
+        size: 1000,
+        quality: 100,
+      );
+
+      // 3. If bytes exist, write to file and update MediaItem
+      if (bytes != null && bytes.isNotEmpty) {
+        await artworkFile.writeAsBytes(bytes);
+
+        // Update the current MediaItem with the physical file path
+        mediaItem.add(item.copyWith(artUri: Uri.file(artworkFile.path)));
+      } else {
+        // Clear artwork if none exists to avoid showing previous song's art
+        mediaItem.add(item.copyWith(artUri: null));
+      }
+    } catch (e) {
+      debugPrint("Error generating standalone thumbnail: $e");
+      // Fallback: don't crash, just show no art
+      mediaItem.add(item.copyWith(artUri: null));
+    }
   }
 
   PlaybackState _transformEvent(PlaybackEvent event) {
@@ -171,7 +217,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
     final audioSources = songs.map((item) {
       final path = item.extras?['url'] as String;
-      // We keep Uri.file here because it fixes the Japanese file path playback issue
       return AudioSource.uri(Uri.file(path), tag: item);
     }).toList();
 
@@ -238,16 +283,16 @@ class AudioProvider extends ChangeNotifier {
       return;
     }
 
+    // Initial load: We do NOT load artwork here to keep it fast.
+    // The AudioHandler will load artwork individually as they play.
     final mediaItems = _songs.map((song) {
-      // FIX: FORCE REMOVE THUMBNAIL
-      // We simply don't calculate the URI and explicitly pass null.
       return MediaItem(
         id: song.id.toString(),
         album: song.album ?? "Unknown Album",
         title: song.title,
         artist: song.artist ?? "Unknown Artist",
         duration: Duration(milliseconds: song.duration ?? 0),
-        artUri: null, // <--- No thumbnail, no problems.
+        artUri: null, // intentionally null, loaded lazily in AudioHandler
         extras: {'url': song.data},
       );
     }).toList();
