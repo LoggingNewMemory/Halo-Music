@@ -16,8 +16,7 @@ class PlayerUI extends StatelessWidget {
 
     if (song == null) return const SizedBox.shrink();
 
-    // Use white for text on top of dark/blurred backgrounds for readability,
-    // but tint the background elements with system color.
+    // Use white for text on top of dark/blurred backgrounds for readability
     const textColor = Colors.white;
     const secondaryTextColor = Colors.white70;
 
@@ -34,10 +33,10 @@ class PlayerUI extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. SOLID BASE COLOR (Prevents white flash during song change)
+          // 1. SOLID BASE COLOR
           Container(color: colorScheme.surfaceContainer),
 
-          // 2. BACKGROUND IMAGE WITH ANIMATED SWITCHER
+          // 2. BACKGROUND IMAGE
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 600),
             transitionBuilder: (Widget child, Animation<double> animation) {
@@ -160,7 +159,7 @@ class PlayerUI extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // --- BITRATE / FORMAT DETECTOR ---
+                // --- BITRATE / FORMAT BADGE ---
                 _FormatBadge(song: song, colorScheme: colorScheme),
 
                 const Spacer(),
@@ -244,7 +243,7 @@ class PlayerUI extends StatelessWidget {
   }
 }
 
-// --- NEW WIDGET: Bitrate/Format Badge ---
+// --- UPDATED WIDGET: Shows Hz/Bits/Kbps for ALL formats ---
 class _FormatBadge extends StatelessWidget {
   final SongModel song;
   final ColorScheme colorScheme;
@@ -253,92 +252,91 @@ class _FormatBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Detect File Extension (e.g., 'flac', 'wav', 'mp3')
+    // 1. Detect File Extension
     final extension = song.displayName
         .split('.')
         .last
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]'), '');
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
 
-    final isHiRes =
-        extension == 'flac' ||
-        extension == 'wav' ||
-        extension == 'aiff' ||
-        extension == 'dsd';
+    final isLossless =
+        extension == 'FLAC' ||
+        extension == 'WAV' ||
+        extension == 'AIFF' ||
+        extension == 'DSD';
 
     // 2. Calculate Bitrate Estimate
-    // Formula: (Size in bits) / (Duration in seconds) = bps
-    // Result divided by 1000 = kbps
-    // (Size * 8) / (Duration_ms / 1000) / 1000  => (Size * 8) / Duration_ms
     final int bitrate = (song.duration != null && song.duration! > 0)
         ? ((song.size * 8) / song.duration!).round()
         : 0;
 
-    if (isHiRes) {
-      // --- HI-RES DISPLAY (Thunder Icon) ---
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: colorScheme.primary.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: colorScheme.primary.withOpacity(0.5),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: colorScheme.primary.withOpacity(0.1),
-              blurRadius: 8,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.bolt_rounded, size: 16, color: colorScheme.primary),
-            const SizedBox(width: 6),
-            Text(
-              "${extension.toUpperCase()} / Hi-Res Audio",
-              style: TextStyle(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ],
-        ),
-      );
+    // 3. Logic to display Hz and Bits
+    // Note: SongModel doesn't provide raw sample rate/depth.
+    // We use standard defaults and upgrade if bitrate/type suggests High-Res.
+    String sampleRate = "44.1kHz";
+    String bitDepth = "16bit";
+
+    if (isLossless) {
+      if (bitrate > 2300) {
+        sampleRate = "96kHz";
+        bitDepth = "24bit";
+      } else if (bitrate > 1500) {
+        sampleRate = "48kHz";
+        bitDepth = "24bit";
+      }
     } else {
-      // --- STANDARD DISPLAY (Music Icon + Bitrate) ---
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.music_note_rounded,
-              size: 14,
-              color: Colors.white70,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              bitrate > 0 ? "$bitrate kbps" : extension.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white70,
-                fontWeight: FontWeight.w500,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      );
+      // For MP3/AAC, standard output is 16-bit 44.1kHz
+      // We keep these values visible as requested.
+      sampleRate = "44.1kHz";
+      bitDepth = "16bit";
     }
+
+    final isHiRes = isLossless && bitrate > 1000;
+
+    // Common Text Style
+    final textStyle = TextStyle(
+      color: isHiRes ? colorScheme.primary : Colors.white70,
+      fontWeight: isHiRes ? FontWeight.bold : FontWeight.w500,
+      fontSize: 12,
+      letterSpacing: 0.5,
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isHiRes
+            ? colorScheme.primary.withOpacity(0.2)
+            : Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: isHiRes
+            ? Border.all(color: colorScheme.primary.withOpacity(0.5), width: 1)
+            : null,
+        boxShadow: isHiRes
+            ? [
+                BoxShadow(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ]
+            : [],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isHiRes ? Icons.bolt_rounded : Icons.music_note_rounded,
+            size: 16,
+            color: isHiRes ? colorScheme.primary : Colors.white70,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            "$extension • $sampleRate • $bitDepth • ${bitrate}kbps",
+            style: textStyle,
+          ),
+        ],
+      ),
+    );
   }
 }
 
