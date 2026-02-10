@@ -1,3 +1,4 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -22,7 +23,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize songs after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<AudioProvider>(context, listen: false).initSongs();
     });
@@ -38,6 +38,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
   Widget build(BuildContext context) {
     final provider = Provider.of<AudioProvider>(context);
     final l10n = AppLocalizations.of(context)!;
+    final currentSong = provider.currentSong;
 
     return Scaffold(
       appBar: AppBar(
@@ -54,75 +55,190 @@ class _MusicListScreenState extends State<MusicListScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: _buildTopControlBar(context, provider),
-          ),
-
-          Expanded(
-            child: !provider.hasPermission
-                ? _buildPermissionDeniedView(l10n)
-                : provider.songs.isEmpty
-                ? Center(child: Text(l10n.noSongsFound))
-                : ListView.builder(
-                    itemCount: provider.songs.length,
-                    itemBuilder: (context, index) {
-                      final song = provider.songs[index];
-                      return ListTile(
-                        leading: SizedBox(
-                          width: 50,
-                          height: 50,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: QueryArtworkWidget(
-                              id: song.id,
-                              type: ArtworkType.AUDIO,
-                              nullArtworkWidget: Container(
-                                color: Colors.grey[300],
-                                child: const Icon(
-                                  Icons.music_note,
-                                  color: Colors.black54,
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 8.0,
+                ),
+                child: _buildTopControlBar(context, provider),
+              ),
+              Expanded(
+                child: !provider.hasPermission
+                    ? _buildPermissionDeniedView(l10n)
+                    : provider.songs.isEmpty
+                    ? Center(child: Text(l10n.noSongsFound))
+                    : ListView.builder(
+                        // INCREASED PADDING: Ensures the last song is visible above the floating player
+                        padding: EdgeInsets.only(
+                          bottom: currentSong != null ? 160 : 20,
+                        ),
+                        itemCount: provider.songs.length,
+                        itemBuilder: (context, index) {
+                          final song = provider.songs[index];
+                          return ListTile(
+                            leading: SizedBox(
+                              width: 50,
+                              height: 50,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: QueryArtworkWidget(
+                                  id: song.id,
+                                  type: ArtworkType.AUDIO,
+                                  nullArtworkWidget: Container(
+                                    color: Colors.grey[300],
+                                    child: const Icon(
+                                      Icons.music_note,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                        title: Text(
-                          song.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          song.artist ?? "Unknown Artist",
-                          maxLines: 1,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        trailing: Text(_formatDuration(song.duration ?? 0)),
-                        onTap: () {
-                          provider.playSong(index);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const PlayerUI()),
+                            title: Text(
+                              song.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              song.artist ?? "Unknown Artist",
+                              maxLines: 1,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            trailing: Text(_formatDuration(song.duration ?? 0)),
+                            onTap: () {
+                              provider.playSong(index);
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
+                      ),
+              ),
+            ],
           ),
+
+          // --- FLOATING MINI PLAYER ---
+          if (currentSong != null)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              // ADDED SAFEAREA: This pushes the player up above the system navigation bar
+              child: SafeArea(
+                top: false, // We only care about the bottom safe area
+                child: _buildMiniPlayer(context, provider, currentSong),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  // --- TOP CONTROL BAR (Search & Sort) ---
+  Widget _buildMiniPlayer(
+    BuildContext context,
+    AudioProvider provider,
+    SongModel song,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PlayerUI()),
+        );
+      },
+      child: Container(
+        height: 70,
+        margin: const EdgeInsets.all(12.0), // Consistent margin
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: QueryArtworkWidget(
+                  id: song.id,
+                  type: ArtworkType.AUDIO,
+                  artworkHeight: 54,
+                  artworkWidth: 54,
+                  nullArtworkWidget: Container(
+                    width: 54,
+                    height: 54,
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.music_note, color: Colors.grey),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    song.artist ?? "Unknown Artist",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.skip_previous),
+                  onPressed: provider.playPrevious,
+                ),
+                StreamBuilder<PlaybackState>(
+                  stream: provider.playbackStateStream,
+                  builder: (context, snapshot) {
+                    final playing = snapshot.data?.playing ?? false;
+                    return IconButton(
+                      icon: Icon(
+                        playing ? Icons.pause_circle : Icons.play_circle,
+                        size: 32,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      onPressed: provider.togglePlay,
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.skip_next),
+                  onPressed: provider.playNext,
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- TOP CONTROL BAR ---
   Widget _buildTopControlBar(BuildContext context, AudioProvider provider) {
     if (_isSearching) {
-      // Show Search TextField
       return Container(
         height: 40,
         decoration: BoxDecoration(
@@ -138,12 +254,11 @@ class _MusicListScreenState extends State<MusicListScreen> {
             suffixIcon: IconButton(
               icon: const Icon(Icons.close, color: Colors.grey),
               onPressed: () {
-                // Clear search and exit search mode
                 setState(() {
                   _isSearching = false;
                   _searchController.clear();
                 });
-                provider.search(''); // Reset list
+                provider.search('');
               },
             ),
             border: InputBorder.none,
@@ -155,7 +270,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
         ),
       );
     } else {
-      // Show Icons (Sort, Refresh, Search)
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -193,7 +307,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        // UPDATED: Wrapped in SafeArea to avoid system navigation bar
         return SafeArea(
           child: Container(
             padding: const EdgeInsets.all(20),
@@ -317,7 +430,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
       onTap: onTap,
       child: Container(
         color: Colors.transparent,
-        padding: const EdgeInsets.all(8.0), // Increased for better touch area
+        padding: const EdgeInsets.all(8.0),
         child: FaIcon(icon, size: 20, color: Colors.grey[800]),
       ),
     );
