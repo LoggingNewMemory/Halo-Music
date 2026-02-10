@@ -38,14 +38,13 @@ class PlayerUI extends StatelessWidget {
           Container(color: colorScheme.surfaceContainer),
 
           // 2. BACKGROUND IMAGE WITH ANIMATED SWITCHER
-          // Fixes flickering by cross-fading between old and new album art
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 600),
             transitionBuilder: (Widget child, Animation<double> animation) {
               return FadeTransition(opacity: animation, child: child);
             },
             child: Container(
-              key: ValueKey(song.id), // Important for Animation
+              key: ValueKey(song.id),
               width: double.infinity,
               height: double.infinity,
               child: QueryArtworkWidget(
@@ -75,16 +74,13 @@ class PlayerUI extends StatelessWidget {
           ),
 
           // 4. SYSTEM COLOR TINT OVERLAY
-          // Mixes Black (scrim) with System Primary color for a cohesive look
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  // Top: Lighter tint of primary
                   colorScheme.primary.withOpacity(0.2),
-                  // Bottom: Darker, almost black for controls visibility
                   Colors.black.withOpacity(0.8),
                 ],
               ),
@@ -150,6 +146,7 @@ class PlayerUI extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
+
                 // --- Artist ---
                 Text(
                   song.artist ?? "Unknown Artist",
@@ -160,6 +157,11 @@ class PlayerUI extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+
+                const SizedBox(height: 16),
+
+                // --- BITRATE / FORMAT DETECTOR ---
+                _FormatBadge(song: song, colorScheme: colorScheme),
 
                 const Spacer(),
 
@@ -186,7 +188,7 @@ class PlayerUI extends StatelessWidget {
                     ),
                     const SizedBox(width: 24),
 
-                    // Play/Pause - Tinted with Primary Color
+                    // Play/Pause
                     StreamBuilder<PlaybackState>(
                       stream: provider.playbackStateStream,
                       builder: (context, snapshot) {
@@ -239,6 +241,104 @@ class PlayerUI extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// --- NEW WIDGET: Bitrate/Format Badge ---
+class _FormatBadge extends StatelessWidget {
+  final SongModel song;
+  final ColorScheme colorScheme;
+
+  const _FormatBadge({required this.song, required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Detect File Extension (e.g., 'flac', 'wav', 'mp3')
+    final extension = song.displayName
+        .split('.')
+        .last
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    final isHiRes =
+        extension == 'flac' ||
+        extension == 'wav' ||
+        extension == 'aiff' ||
+        extension == 'dsd';
+
+    // 2. Calculate Bitrate Estimate
+    // Formula: (Size in bits) / (Duration in seconds) = bps
+    // Result divided by 1000 = kbps
+    // (Size * 8) / (Duration_ms / 1000) / 1000  => (Size * 8) / Duration_ms
+    final int bitrate = (song.duration != null && song.duration! > 0)
+        ? ((song.size * 8) / song.duration!).round()
+        : 0;
+
+    if (isHiRes) {
+      // --- HI-RES DISPLAY (Thunder Icon) ---
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: colorScheme.primary.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: colorScheme.primary.withOpacity(0.5),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.primary.withOpacity(0.1),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.bolt_rounded, size: 16, color: colorScheme.primary),
+            const SizedBox(width: 6),
+            Text(
+              "${extension.toUpperCase()} / Hi-Res Audio",
+              style: TextStyle(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // --- STANDARD DISPLAY (Music Icon + Bitrate) ---
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.music_note_rounded,
+              size: 14,
+              color: Colors.white70,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              bitrate > 0 ? "$bitrate kbps" : extension.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
 
