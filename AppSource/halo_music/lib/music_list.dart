@@ -79,7 +79,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
                         itemCount: provider.songs.length,
                         itemBuilder: (context, index) {
                           final song = provider.songs[index];
-                          // NEW: Uses Custom Cached Tile to prevent scroll lag
+                          // Uses Custom Cached Tile to prevent scroll lag
                           return _CachedSongTile(
                             song: song,
                             onTap: () => provider.playSong(index),
@@ -123,7 +123,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
         decoration: BoxDecoration(
           // SYSTEM COLOR
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(35), // Fully rounded ends
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -136,14 +136,14 @@ class _MusicListScreenState extends State<MusicListScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.all(8.0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+              child: ClipOval(
+                // CIRCLE SHAPE
                 child: QueryArtworkWidget(
                   id: song.id,
                   type: ArtworkType.AUDIO,
                   artworkHeight: 54,
                   artworkWidth: 54,
-                  size: 200,
+                  size: 200, // Small render size
                   quality: 85,
                   nullArtworkWidget: Container(
                     width: 54,
@@ -210,7 +210,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
                 ),
               ],
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 16),
           ],
         ),
       ),
@@ -419,15 +419,9 @@ class _MusicListScreenState extends State<MusicListScreen> {
       ),
     );
   }
-
-  String _formatDuration(int milliseconds) {
-    final duration = Duration(milliseconds: milliseconds);
-    return "${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}";
-  }
 }
 
-// --- NEW CACHED TILE WIDGET ---
-// This widget handles the memory caching logic to ensure instant scrolling
+// --- CACHED TILE WIDGET ---
 class _CachedSongTile extends StatelessWidget {
   final SongModel song;
   final VoidCallback onTap;
@@ -442,8 +436,8 @@ class _CachedSongTile extends StatelessWidget {
       leading: SizedBox(
         width: 50,
         height: 50,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+        child: ClipOval(
+          // CIRCLE SHAPE
           child: FutureBuilder<Uint8List?>(
             // Try to get from Memory Cache first
             future: provider.getArtworkBytes(song.id),
@@ -452,17 +446,14 @@ class _CachedSongTile extends StatelessWidget {
                 return Image.memory(
                   snapshot.data!,
                   fit: BoxFit.cover,
-                  gaplessPlayback: true, // Prevents white flash on reload
+                  gaplessPlayback: true,
                 );
               }
-              // If we are waiting or there is no artwork
               if (snapshot.connectionState == ConnectionState.waiting) {
-                // Show a placeholder while loading from disk/db
                 return Container(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 );
               }
-              // No artwork found
               return Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: const Icon(Icons.music_note, color: Colors.black54),
