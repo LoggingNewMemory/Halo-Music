@@ -86,7 +86,7 @@ class HaloMusicApp extends StatelessWidget {
   }
 }
 
-// --- AUDIO HANDLER (Unchanged mostly, just efficient) ---
+// --- AUDIO HANDLER ---
 class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final _player = AudioPlayer();
   final _audioQuery = OnAudioQuery();
@@ -202,29 +202,28 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
 // --- PROVIDER ---
 
-enum SortType { title, artist, dateAdded }
+// UPDATED: Added more sort types for A-Z, Z-A logic
+enum SortType { titleAZ, titleZA, artistAZ, artistZA, dateNewest, dateOldest }
 
 class AudioProvider extends ChangeNotifier {
   final AudioHandler _audioHandler;
   final OnAudioQuery _audioQuery = OnAudioQuery();
 
-  // _allSongs keeps the original fetched list
   List<SongModel> _allSongs = [];
-  // _displayedSongs is what the UI shows (filtered/sorted)
   List<SongModel> _displayedSongs = [];
 
   bool _hasPermission = false;
-  SortType _currentSort = SortType.dateAdded;
+  // UPDATED: Default sort
+  SortType _currentSort = SortType.dateNewest;
 
   AudioProvider(this._audioHandler) {
-    // FIX: Do NOT listen to playbackState here to prevent flickering the whole list.
-    // Only listen to mediaItem to know what the current song is.
     _audioHandler.mediaItem.listen((_) => notifyListeners());
   }
 
   List<SongModel> get songs => _displayedSongs;
   bool get hasPermission => _hasPermission;
   AudioHandler get audioHandler => _audioHandler;
+  SortType get currentSort => _currentSort;
 
   SongModel? get currentSong {
     final mediaItem = _audioHandler.mediaItem.value;
@@ -259,9 +258,11 @@ class AudioProvider extends ChangeNotifier {
       ignoreCase: true,
     );
 
-    // Filter short clips
     _allSongs = fetchedSongs.where((e) => (e.duration ?? 0) > 10000).toList();
-    _displayedSongs = List.from(_allSongs); // Initial display
+    _displayedSongs = List.from(_allSongs);
+
+    // Apply default sort immediately after fetching
+    _applySort();
 
     if (_allSongs.isEmpty) {
       notifyListeners();
@@ -297,7 +298,7 @@ class AudioProvider extends ChangeNotifier {
             (song.artist?.toLowerCase().contains(query.toLowerCase()) ?? false);
       }).toList();
     }
-    _applySort(); // Re-sort after filtering
+    _applySort();
     notifyListeners();
   }
 
@@ -308,29 +309,47 @@ class AudioProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // UPDATED: Logic for detailed sorting
   void _applySort() {
     switch (_currentSort) {
-      case SortType.title:
-        _displayedSongs.sort((a, b) => a.title.compareTo(b.title));
-        break;
-      case SortType.artist:
+      case SortType.titleAZ:
         _displayedSongs.sort(
-          (a, b) => (a.artist ?? "").compareTo(b.artist ?? ""),
+          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
         );
         break;
-      case SortType.dateAdded:
-        // Assuming higher ID is newer if dateAdded isn't reliable,
-        // but typically dateAdded is best.
+      case SortType.titleZA:
+        _displayedSongs.sort(
+          (a, b) => b.title.toLowerCase().compareTo(a.title.toLowerCase()),
+        );
+        break;
+      case SortType.artistAZ:
+        _displayedSongs.sort(
+          (a, b) => (a.artist ?? "").toLowerCase().compareTo(
+            (b.artist ?? "").toLowerCase(),
+          ),
+        );
+        break;
+      case SortType.artistZA:
+        _displayedSongs.sort(
+          (a, b) => (b.artist ?? "").toLowerCase().compareTo(
+            (a.artist ?? "").toLowerCase(),
+          ),
+        );
+        break;
+      case SortType.dateNewest:
         _displayedSongs.sort(
           (a, b) => (b.dateAdded ?? 0).compareTo(a.dateAdded ?? 0),
+        );
+        break;
+      case SortType.dateOldest:
+        _displayedSongs.sort(
+          (a, b) => (a.dateAdded ?? 0).compareTo(b.dateAdded ?? 0),
         );
         break;
     }
   }
 
   Future<void> playSong(int index) async {
-    // We must find the index of the song in the ORIGINAL queue (AudioHandler queue)
-    // because displayedSongs might be filtered/sorted.
     final songToPlay = _displayedSongs[index];
     final originalIndex = _allSongs.indexOf(songToPlay);
 
@@ -342,7 +361,6 @@ class AudioProvider extends ChangeNotifier {
   Future<void> seek(Duration position) async =>
       await _audioHandler.seek(position);
 
-  // Use a Stream getter for player state to avoid rebuilding the whole provider
   Stream<PlaybackState> get playbackStateStream => _audioHandler.playbackState;
 
   void togglePlay() {
