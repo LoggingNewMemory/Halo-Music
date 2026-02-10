@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:audio_service/audio_service.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
@@ -66,22 +67,40 @@ class HaloMusicApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Halo Music',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        primarySwatch: Colors.blue,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-      ),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('en')],
-      home: const MusicListScreen(),
+    // 1. SYSTEM COLORS SETUP
+    return DynamicColorBuilder(
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        ColorScheme lightScheme;
+        ColorScheme darkScheme;
+
+        // Use system colors if available, otherwise fallback to Blue
+        if (lightDynamic != null && darkDynamic != null) {
+          lightScheme = lightDynamic.harmonized();
+          darkScheme = darkDynamic.harmonized();
+        } else {
+          lightScheme = ColorScheme.fromSeed(seedColor: Colors.blue);
+          darkScheme = ColorScheme.fromSeed(
+            seedColor: Colors.blue,
+            brightness: Brightness.dark,
+          );
+        }
+
+        return MaterialApp(
+          title: 'Halo Music',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(useMaterial3: true, colorScheme: lightScheme),
+          darkTheme: ThemeData(useMaterial3: true, colorScheme: darkScheme),
+          themeMode: ThemeMode.system,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('en')],
+          home: const MusicListScreen(),
+        );
+      },
     );
   }
 }
@@ -109,7 +128,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
   }
 
-  // NEW: Helper to get a persistent cache directory
+  // File-based cache for Notifications (Persists on disk)
   Future<Directory> _getArtworkCacheDirectory() async {
     final appDir = await getApplicationSupportDirectory();
     final artworkDir = Directory('${appDir.path}/artwork_cache');
@@ -119,7 +138,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     return artworkDir;
   }
 
-  // NEW: Method to clear the cache manually
   Future<void> clearArtworkCache() async {
     try {
       final cacheDir = await _getArtworkCacheDirectory();
@@ -135,18 +153,14 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> _updateNotificationWithArtwork(MediaItem item) async {
     try {
       final int songId = int.parse(item.id);
-
-      // UPDATED: Use persistent cache directory
       final cacheDir = await _getArtworkCacheDirectory();
       final File artworkFile = File('${cacheDir.path}/cover_$songId.jpg');
 
-      // Check if artwork is already cached
       if (await artworkFile.exists()) {
         mediaItem.add(item.copyWith(artUri: Uri.file(artworkFile.path)));
         return;
       }
 
-      // If not cached, query and save
       final Uint8List? bytes = await _audioQuery.queryArtwork(
         songId,
         ArtworkType.AUDIO,
@@ -229,7 +243,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
 // --- PROVIDER ---
 
-// UPDATED: Added more sort types for A-Z, Z-A logic
 enum SortType { titleAZ, titleZA, artistAZ, artistZA, dateNewest, dateOldest }
 
 class AudioProvider extends ChangeNotifier {
@@ -240,8 +253,11 @@ class AudioProvider extends ChangeNotifier {
   List<SongModel> _displayedSongs = [];
 
   bool _hasPermission = false;
-  // UPDATED: Default sort
   SortType _currentSort = SortType.dateNewest;
+
+  // 2. NEW: Memory Cache for List Scrolling
+  // Stores raw image bytes so we don't query the database repeatedly
+  final Map<int, Uint8List?> _artworkMemoryCache = {};
 
   AudioProvider(this._audioHandler) {
     _audioHandler.mediaItem.listen((_) => notifyListeners());
@@ -262,13 +278,36 @@ class AudioProvider extends ChangeNotifier {
     }
   }
 
-  // UPDATED: Added forceRefresh parameter
+  // 3. NEW: Method to fetch and cache artwork
+  Future<Uint8List?> getArtworkBytes(int id) async {
+    // Return immediately if in memory cache
+    if (_artworkMemoryCache.containsKey(id)) {
+      return _artworkMemoryCache[id];
+    }
+
+    try {
+      // Fetch small quality for the list
+      final Uint8List? bytes = await _audioQuery.queryArtwork(
+        id,
+        ArtworkType.AUDIO,
+        format: ArtworkFormat.JPEG,
+        size: 200, // Small size for fast list loading
+        quality: 80,
+      );
+
+      // Store in memory
+      _artworkMemoryCache[id] = bytes;
+      return bytes;
+    } catch (e) {
+      _artworkMemoryCache[id] = null;
+      return null;
+    }
+  }
+
   Future<void> initSongs({bool forceRefresh = false}) async {
-    // --- UPDATE START: Stop/Pause music immediately on refresh ---
     if (_audioHandler.playbackState.value.playing) {
       await _audioHandler.pause();
     }
-    // --- UPDATE END ---
 
     Map<Permission, PermissionStatus> statuses = await [
       Permission.audio,
@@ -285,9 +324,12 @@ class AudioProvider extends ChangeNotifier {
       return;
     }
 
-    // NEW: Clear cache if this is a manual refresh
-    if (forceRefresh && _audioHandler is MyAudioHandler) {
-      await (_audioHandler as MyAudioHandler).clearArtworkCache();
+    if (forceRefresh) {
+      _artworkMemoryCache.clear(); // Clear RAM cache
+      if (_audioHandler is MyAudioHandler) {
+        await (_audioHandler as MyAudioHandler)
+            .clearArtworkCache(); // Clear Disk cache
+      }
     }
 
     List<SongModel> fetchedSongs = await _audioQuery.querySongs(
@@ -300,7 +342,6 @@ class AudioProvider extends ChangeNotifier {
     _allSongs = fetchedSongs.where((e) => (e.duration ?? 0) > 10000).toList();
     _displayedSongs = List.from(_allSongs);
 
-    // Apply default sort immediately after fetching
     _applySort();
 
     if (_allSongs.isEmpty) {
@@ -327,7 +368,6 @@ class AudioProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Search Logic ---
   void search(String query) {
     if (query.isEmpty) {
       _displayedSongs = List.from(_allSongs);
@@ -341,14 +381,12 @@ class AudioProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Sort Logic ---
   void sort(SortType type) {
     _currentSort = type;
     _applySort();
     notifyListeners();
   }
 
-  // UPDATED: Logic for detailed sorting
   void _applySort() {
     switch (_currentSort) {
       case SortType.titleAZ:
