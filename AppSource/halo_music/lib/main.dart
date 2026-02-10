@@ -109,17 +109,44 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
   }
 
+  // NEW: Helper to get a persistent cache directory
+  Future<Directory> _getArtworkCacheDirectory() async {
+    final appDir = await getApplicationSupportDirectory();
+    final artworkDir = Directory('${appDir.path}/artwork_cache');
+    if (!await artworkDir.exists()) {
+      await artworkDir.create(recursive: true);
+    }
+    return artworkDir;
+  }
+
+  // NEW: Method to clear the cache manually
+  Future<void> clearArtworkCache() async {
+    try {
+      final cacheDir = await _getArtworkCacheDirectory();
+      if (await cacheDir.exists()) {
+        await cacheDir.delete(recursive: true);
+        debugPrint("Artwork cache cleared.");
+      }
+    } catch (e) {
+      debugPrint("Error clearing artwork cache: $e");
+    }
+  }
+
   Future<void> _updateNotificationWithArtwork(MediaItem item) async {
     try {
       final int songId = int.parse(item.id);
-      final tempDir = await getTemporaryDirectory();
-      final File artworkFile = File('${tempDir.path}/cover_$songId.jpg');
 
+      // UPDATED: Use persistent cache directory
+      final cacheDir = await _getArtworkCacheDirectory();
+      final File artworkFile = File('${cacheDir.path}/cover_$songId.jpg');
+
+      // Check if artwork is already cached
       if (await artworkFile.exists()) {
         mediaItem.add(item.copyWith(artUri: Uri.file(artworkFile.path)));
         return;
       }
 
+      // If not cached, query and save
       final Uint8List? bytes = await _audioQuery.queryArtwork(
         songId,
         ArtworkType.AUDIO,
@@ -235,7 +262,8 @@ class AudioProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> initSongs() async {
+  // UPDATED: Added forceRefresh parameter
+  Future<void> initSongs({bool forceRefresh = false}) async {
     // --- UPDATE START: Stop/Pause music immediately on refresh ---
     if (_audioHandler.playbackState.value.playing) {
       await _audioHandler.pause();
@@ -255,6 +283,11 @@ class AudioProvider extends ChangeNotifier {
       _hasPermission = false;
       notifyListeners();
       return;
+    }
+
+    // NEW: Clear cache if this is a manual refresh
+    if (forceRefresh && _audioHandler is MyAudioHandler) {
+      await (_audioHandler as MyAudioHandler).clearArtworkCache();
     }
 
     List<SongModel> fetchedSongs = await _audioQuery.querySongs(

@@ -24,6 +24,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Default load: NO force refresh, uses cache if available
       Provider.of<AudioProvider>(context, listen: false).initSongs();
     });
   }
@@ -282,7 +283,8 @@ class _MusicListScreenState extends State<MusicListScreen> {
             context,
             FontAwesomeIcons.arrowsRotate,
             onTap: () {
-              provider.initSongs();
+              // UPDATED: Triggers Force Refresh (Clear Cache)
+              provider.initSongs(forceRefresh: true);
             },
           ),
           _topButton(
