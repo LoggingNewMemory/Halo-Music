@@ -8,21 +8,54 @@ class SettingsUI extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.settings)),
+      backgroundColor: colorScheme.surface,
+      appBar: AppBar(title: Text(l10n.settings), elevation: 0),
       body: ListView(
         children: [
-          ListTile(
-            leading: const FaIcon(FontAwesomeIcons.palette),
-            title: Text(l10n.theme),
+          _buildSettingsTile(
+            context,
+            icon: FontAwesomeIcons.palette,
+            title: l10n.theme,
+            subtitle: "System default",
           ),
-          ListTile(
-            leading: const FaIcon(FontAwesomeIcons.circleInfo),
-            title: Text(l10n.about),
+          _buildSettingsTile(
+            context,
+            icon: FontAwesomeIcons.circleInfo,
+            title: l10n.about,
+            subtitle: "Version 1.0.0",
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSettingsTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    String? subtitle,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: FaIcon(icon, size: 20, color: colorScheme.onSecondaryContainer),
+      ),
+      title: Text(title, style: TextStyle(color: colorScheme.onSurface)),
+      subtitle: subtitle != null
+          ? Text(
+              subtitle,
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            )
+          : null,
     );
   }
 }

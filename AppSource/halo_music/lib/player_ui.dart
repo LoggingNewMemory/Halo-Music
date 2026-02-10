@@ -12,10 +12,12 @@ class PlayerUI extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = Provider.of<AudioProvider>(context);
     final song = provider.currentSong;
+    final colorScheme = Theme.of(context).colorScheme;
 
     if (song == null) return const SizedBox.shrink();
 
-    // Text color scheme (ensures visibility on dark background)
+    // Use white for text on top of dark/blurred backgrounds for readability,
+    // but tint the background elements with system color.
     const textColor = Colors.white;
     const secondaryTextColor = Colors.white70;
 
@@ -32,22 +34,64 @@ class PlayerUI extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. BLURRED BACKGROUND
-          QueryArtworkWidget(
-            id: song.id,
-            type: ArtworkType.AUDIO,
-            artworkFit: BoxFit.cover,
-            size: 500, // Reduced from 1000 for performance
-            quality: 90,
-            nullArtworkWidget: Container(color: Colors.black),
-          ),
-          // Blur Effect
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 30.0, sigmaY: 30.0),
-            child: Container(color: Colors.black.withOpacity(0.5)),
+          // 1. SOLID BASE COLOR (Prevents white flash during song change)
+          Container(color: colorScheme.surfaceContainer),
+
+          // 2. BACKGROUND IMAGE WITH ANIMATED SWITCHER
+          // Fixes flickering by cross-fading between old and new album art
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 600),
+            transitionBuilder: (Widget child, Animation<double> animation) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            child: Container(
+              key: ValueKey(song.id), // Important for Animation
+              width: double.infinity,
+              height: double.infinity,
+              child: QueryArtworkWidget(
+                id: song.id,
+                type: ArtworkType.AUDIO,
+                artworkFit: BoxFit.cover,
+                size: 500,
+                quality: 90,
+                nullArtworkWidget: Container(
+                  color: colorScheme.primaryContainer,
+                  child: Center(
+                    child: Icon(
+                      Icons.music_note,
+                      size: 200,
+                      color: colorScheme.onPrimaryContainer.withOpacity(0.2),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
 
-          // 2. CONTENT
+          // 3. BLUR EFFECT
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+            child: Container(color: Colors.transparent),
+          ),
+
+          // 4. SYSTEM COLOR TINT OVERLAY
+          // Mixes Black (scrim) with System Primary color for a cohesive look
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  // Top: Lighter tint of primary
+                  colorScheme.primary.withOpacity(0.2),
+                  // Bottom: Darker, almost black for controls visibility
+                  Colors.black.withOpacity(0.8),
+                ],
+              ),
+            ),
+          ),
+
+          // 5. FOREGROUND CONTENT
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 24.0,
@@ -56,22 +100,21 @@ class PlayerUI extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 60),
-                // --- Artwork ---
                 AspectRatio(
                   aspectRatio: 1,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(32),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.4),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
+                          blurRadius: 24,
+                          offset: const Offset(0, 12),
                         ),
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(32),
                       child: QueryArtworkWidget(
                         id: song.id,
                         type: ArtworkType.AUDIO,
@@ -81,11 +124,11 @@ class PlayerUI extends StatelessWidget {
                         quality: 100,
                         keepOldArtwork: true,
                         nullArtworkWidget: Container(
-                          color: Colors.grey[900],
-                          child: const Icon(
+                          color: colorScheme.surfaceContainerHighest,
+                          child: Icon(
                             Icons.music_note,
-                            size: 100,
-                            color: Colors.white24,
+                            size: 120,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -93,7 +136,7 @@ class PlayerUI extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 48),
 
                 // --- Song Title ---
                 Text(
@@ -120,46 +163,56 @@ class PlayerUI extends StatelessWidget {
 
                 const Spacer(),
 
-                // --- Fixed Slider & Progress ---
+                // --- Slider ---
                 _PlayerSlider(
                   duration: Duration(milliseconds: song.duration ?? 0),
                   audioHandler: provider.audioHandler,
+                  colorScheme: colorScheme,
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
                 // --- Controls ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
-                      iconSize: 50,
+                      iconSize: 45,
                       icon: const Icon(
                         Icons.skip_previous_rounded,
                         color: Colors.white,
                       ),
                       onPressed: provider.playPrevious,
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 24),
 
-                    // Play/Pause
+                    // Play/Pause - Tinted with Primary Color
                     StreamBuilder<PlaybackState>(
                       stream: provider.playbackStateStream,
                       builder: (context, snapshot) {
                         final playing = snapshot.data?.playing ?? false;
                         return Container(
-                          decoration: const BoxDecoration(
+                          height: 72,
+                          width: 72,
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white,
+                            color: colorScheme.primaryContainer,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
                           child: IconButton(
-                            iconSize: 60,
+                            iconSize: 36,
                             padding: EdgeInsets.zero,
                             icon: Icon(
                               playing
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded,
-                              color: Colors.black,
+                              color: colorScheme.onPrimaryContainer,
                             ),
                             onPressed: provider.togglePlay,
                           ),
@@ -167,9 +220,9 @@ class PlayerUI extends StatelessWidget {
                       },
                     ),
 
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 24),
                     IconButton(
-                      iconSize: 50,
+                      iconSize: 45,
                       icon: const Icon(
                         Icons.skip_next_rounded,
                         color: Colors.white,
@@ -189,19 +242,22 @@ class PlayerUI extends StatelessWidget {
   }
 }
 
-// --- SEPARATE SLIDER WIDGET FOR BUG FIX ---
 class _PlayerSlider extends StatefulWidget {
   final Duration duration;
   final AudioHandler audioHandler;
+  final ColorScheme colorScheme;
 
-  const _PlayerSlider({required this.duration, required this.audioHandler});
+  const _PlayerSlider({
+    required this.duration,
+    required this.audioHandler,
+    required this.colorScheme,
+  });
 
   @override
   State<_PlayerSlider> createState() => _PlayerSliderState();
 }
 
 class _PlayerSliderState extends State<_PlayerSlider> {
-  // Local state to track sliding
   double? _dragValue;
   bool _isDragging = false;
 
@@ -212,31 +268,25 @@ class _PlayerSliderState extends State<_PlayerSlider> {
       builder: (context, snapshot) {
         final position = snapshot.data ?? Duration.zero;
         final totalSeconds = widget.duration.inSeconds.toDouble();
-
-        // If dragging, use local value. If not, use stream value.
-        double sliderValue = _isDragging
-            ? _dragValue!
-            : position.inSeconds.toDouble().clamp(
-                0.0,
-                totalSeconds > 0 ? totalSeconds : 0.0,
-              );
-
-        // Ensure max is never 0 to prevent division by zero errors
         final max = totalSeconds > 0 ? totalSeconds : 1.0;
 
-        // Safety check if song changed but UI hasn't caught up
+        double sliderValue = _isDragging
+            ? _dragValue!
+            : position.inSeconds.toDouble().clamp(0.0, max);
+
         if (sliderValue > max) sliderValue = max;
 
         return Column(
           children: [
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
-                activeTrackColor: Colors.white,
+                activeTrackColor: widget.colorScheme.primary,
                 inactiveTrackColor: Colors.white24,
                 thumbColor: Colors.white,
                 trackHeight: 4.0,
+                overlayColor: widget.colorScheme.primary.withOpacity(0.2),
                 thumbShape: const RoundSliderThumbShape(
-                  enabledThumbRadius: 8.0,
+                  enabledThumbRadius: 6.0,
                 ),
               ),
               child: Slider(
@@ -250,7 +300,6 @@ class _PlayerSliderState extends State<_PlayerSlider> {
                   });
                 },
                 onChangeEnd: (value) async {
-                  // Only seek when user lets go
                   await widget.audioHandler.seek(
                     Duration(seconds: value.toInt()),
                   );
@@ -272,11 +321,11 @@ class _PlayerSliderState extends State<_PlayerSlider> {
                           ? Duration(seconds: _dragValue!.toInt())
                           : position,
                     ),
-                    style: const TextStyle(color: Colors.white70),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   Text(
                     _formatDuration(widget.duration),
-                    style: const TextStyle(color: Colors.white70),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ],
               ),
@@ -289,8 +338,7 @@ class _PlayerSliderState extends State<_PlayerSlider> {
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return "${duration.inMinutes}:$seconds"; // Simplified to match design
+    return "${duration.inMinutes}:$seconds";
   }
 }

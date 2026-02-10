@@ -67,20 +67,18 @@ class HaloMusicApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. SYSTEM COLORS SETUP
     return DynamicColorBuilder(
       builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
         ColorScheme lightScheme;
         ColorScheme darkScheme;
 
-        // Use system colors if available, otherwise fallback to Blue
         if (lightDynamic != null && darkDynamic != null) {
           lightScheme = lightDynamic.harmonized();
           darkScheme = darkDynamic.harmonized();
         } else {
-          lightScheme = ColorScheme.fromSeed(seedColor: Colors.blue);
+          lightScheme = ColorScheme.fromSeed(seedColor: Colors.deepPurple);
           darkScheme = ColorScheme.fromSeed(
-            seedColor: Colors.blue,
+            seedColor: Colors.deepPurple,
             brightness: Brightness.dark,
           );
         }
@@ -88,8 +86,22 @@ class HaloMusicApp extends StatelessWidget {
         return MaterialApp(
           title: 'Halo Music',
           debugShowCheckedModeBanner: false,
-          theme: ThemeData(useMaterial3: true, colorScheme: lightScheme),
-          darkTheme: ThemeData(useMaterial3: true, colorScheme: darkScheme),
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: lightScheme,
+            appBarTheme: AppBarTheme(
+              backgroundColor: lightScheme.surface,
+              foregroundColor: lightScheme.onSurface,
+            ),
+          ),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            colorScheme: darkScheme,
+            appBarTheme: AppBarTheme(
+              backgroundColor: darkScheme.surface,
+              foregroundColor: darkScheme.onSurface,
+            ),
+          ),
           themeMode: ThemeMode.system,
           localizationsDelegates: const [
             AppLocalizations.delegate,
@@ -128,7 +140,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
   }
 
-  // File-based cache for Notifications (Persists on disk)
   Future<Directory> _getArtworkCacheDirectory() async {
     final appDir = await getApplicationSupportDirectory();
     final artworkDir = Directory('${appDir.path}/artwork_cache');
@@ -255,8 +266,6 @@ class AudioProvider extends ChangeNotifier {
   bool _hasPermission = false;
   SortType _currentSort = SortType.dateNewest;
 
-  // 2. NEW: Memory Cache for List Scrolling
-  // Stores raw image bytes so we don't query the database repeatedly
   final Map<int, Uint8List?> _artworkMemoryCache = {};
 
   AudioProvider(this._audioHandler) {
@@ -278,24 +287,19 @@ class AudioProvider extends ChangeNotifier {
     }
   }
 
-  // 3. NEW: Method to fetch and cache artwork
   Future<Uint8List?> getArtworkBytes(int id) async {
-    // Return immediately if in memory cache
     if (_artworkMemoryCache.containsKey(id)) {
       return _artworkMemoryCache[id];
     }
 
     try {
-      // Fetch small quality for the list
       final Uint8List? bytes = await _audioQuery.queryArtwork(
         id,
         ArtworkType.AUDIO,
         format: ArtworkFormat.JPEG,
-        size: 200, // Small size for fast list loading
+        size: 200,
         quality: 80,
       );
-
-      // Store in memory
       _artworkMemoryCache[id] = bytes;
       return bytes;
     } catch (e) {
@@ -325,10 +329,9 @@ class AudioProvider extends ChangeNotifier {
     }
 
     if (forceRefresh) {
-      _artworkMemoryCache.clear(); // Clear RAM cache
+      _artworkMemoryCache.clear();
       if (_audioHandler is MyAudioHandler) {
-        await (_audioHandler as MyAudioHandler)
-            .clearArtworkCache(); // Clear Disk cache
+        await (_audioHandler as MyAudioHandler).clearArtworkCache();
       }
     }
 
