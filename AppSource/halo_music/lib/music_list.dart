@@ -193,56 +193,59 @@ class _MusicListScreenState extends State<MusicListScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Sort By",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              _buildSortOption(
-                context,
-                provider,
-                "Title (A-Z)",
-                SortType.titleAZ,
-              ),
-              _buildSortOption(
-                context,
-                provider,
-                "Title (Z-A)",
-                SortType.titleZA,
-              ),
-              const Divider(),
-              _buildSortOption(
-                context,
-                provider,
-                "Artist (A-Z)",
-                SortType.artistAZ,
-              ),
-              _buildSortOption(
-                context,
-                provider,
-                "Artist (Z-A)",
-                SortType.artistZA,
-              ),
-              const Divider(),
-              _buildSortOption(
-                context,
-                provider,
-                "Date Added (Newest)",
-                SortType.dateNewest,
-              ),
-              _buildSortOption(
-                context,
-                provider,
-                "Date Added (Oldest)",
-                SortType.dateOldest,
-              ),
-            ],
+        // UPDATED: Wrapped in SafeArea to avoid system navigation bar
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Sort By",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                _buildSortOption(
+                  context,
+                  provider,
+                  "Title (A-Z)",
+                  SortType.titleAZ,
+                ),
+                _buildSortOption(
+                  context,
+                  provider,
+                  "Title (Z-A)",
+                  SortType.titleZA,
+                ),
+                const Divider(),
+                _buildSortOption(
+                  context,
+                  provider,
+                  "Artist (A-Z)",
+                  SortType.artistAZ,
+                ),
+                _buildSortOption(
+                  context,
+                  provider,
+                  "Artist (Z-A)",
+                  SortType.artistZA,
+                ),
+                const Divider(),
+                _buildSortOption(
+                  context,
+                  provider,
+                  "Date Added (Newest)",
+                  SortType.dateNewest,
+                ),
+                _buildSortOption(
+                  context,
+                  provider,
+                  "Date Added (Oldest)",
+                  SortType.dateOldest,
+                ),
+              ],
+            ),
           ),
         );
       },

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
-import 'l10n/app_localizations.dart';
+// Removed 'l10n/app_localizations.dart' as it is no longer used
 import 'main.dart';
 
 class PlayerUI extends StatelessWidget {
@@ -16,7 +16,6 @@ class PlayerUI extends StatelessWidget {
     // we use StreamBuilders for that.
     final provider = Provider.of<AudioProvider>(context);
     final song = provider.currentSong;
-    final l10n = AppLocalizations.of(context)!;
 
     if (song == null) return const SizedBox.shrink();
 
@@ -163,41 +162,10 @@ class PlayerUI extends StatelessWidget {
             ),
 
             const Spacer(),
-
-            // --- Up Next ---
-            // Note: This logic is simplified. It fetches the next item in the provider's *filtered* list.
-            Container(
-              padding: const EdgeInsets.all(16),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade300)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l10n.upNext, style: const TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 5),
-                  Text(
-                    _getNextSongTitle(provider),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
     );
-  }
-
-  String _getNextSongTitle(AudioProvider provider) {
-    if (provider.songs.isEmpty || provider.currentSong == null) return "-";
-    final currentIndex = provider.songs.indexOf(provider.currentSong!);
-    if (currentIndex != -1 && currentIndex + 1 < provider.songs.length) {
-      return provider.songs[currentIndex + 1].title;
-    }
-    return "-";
   }
 
   String _formatDuration(Duration duration) {

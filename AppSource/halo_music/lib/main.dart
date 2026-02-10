@@ -236,6 +236,12 @@ class AudioProvider extends ChangeNotifier {
   }
 
   Future<void> initSongs() async {
+    // --- UPDATE START: Stop/Pause music immediately on refresh ---
+    if (_audioHandler.playbackState.value.playing) {
+      await _audioHandler.pause();
+    }
+    // --- UPDATE END ---
+
     Map<Permission, PermissionStatus> statuses = await [
       Permission.audio,
       Permission.storage,
