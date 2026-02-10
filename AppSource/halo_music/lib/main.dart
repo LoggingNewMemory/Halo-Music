@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart'; // NEW IMPORT
+import 'package:path_provider/path_provider.dart';
 
 import 'music_list.dart';
 
@@ -92,7 +92,7 @@ class HaloMusicApp extends StatelessWidget {
 
 class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final _player = AudioPlayer();
-  final _audioQuery = OnAudioQuery(); // Internal query instance for artwork
+  final _audioQuery = OnAudioQuery();
 
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
@@ -102,9 +102,11 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       if (index != null && queue.value.isNotEmpty) {
         if (index >= 0 && index < queue.value.length) {
           final newItem = queue.value[index];
+
+          // 1. Immediately update text info (Title/Artist)
           mediaItem.add(newItem);
 
-          // TRIGGER STANDALONE ARTWORK LOGIC
+          // 2. Fetch and update artwork asynchronously
           _updateNotificationWithArtwork(newItem);
         }
       }
@@ -117,19 +119,44 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
   }
 
-  /// STANDALONE LOGIC:
-  /// Manually extracts artwork bytes -> Writes to temp file -> Updates Notification
-  /// This fixes the issue where special characters break the system content URI.
+  /// ------------------------------------------------------------------
+  /// STANDALONE ARTWORK LOGIC
+  /// 1. Cleans up old 'cover_*.jpg' files to save space.
+  /// 2. Generates 'cover_{songId}.jpg' so the URI is unique.
+  /// 3. Updates the Notification with this physical file.
+  /// ------------------------------------------------------------------
   Future<void> _updateNotificationWithArtwork(MediaItem item) async {
     try {
       final int songId = int.parse(item.id);
-
-      // 1. Get the Application Cache Directory
       final tempDir = await getTemporaryDirectory();
-      final File artworkFile = File('${tempDir.path}/notification_cover.jpg');
+      final File artworkFile = File('${tempDir.path}/cover_$songId.jpg');
 
-      // 2. Query the raw artwork bytes specifically for this ID
-      // We use ArtworkType.AUDIO to target the song ID directly
+      // --- CLEANUP: Delete other cover files ---
+      try {
+        final dir = Directory(tempDir.path);
+        final List<FileSystemEntity> files = dir.listSync();
+        for (var file in files) {
+          if (file is File) {
+            final filename = file.uri.pathSegments.last;
+            // Delete if it's a cover file AND NOT the one we need right now
+            if (filename.startsWith("cover_") &&
+                filename.endsWith(".jpg") &&
+                filename != "cover_$songId.jpg") {
+              await file.delete();
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint("Cleanup warning: $e");
+      }
+
+      // --- CHECK CACHE: If this song's art exists, use it ---
+      if (await artworkFile.exists()) {
+        mediaItem.add(item.copyWith(artUri: Uri.file(artworkFile.path)));
+        return;
+      }
+
+      // --- GENERATE: Extract bytes from OnAudioQuery ---
       final Uint8List? bytes = await _audioQuery.queryArtwork(
         songId,
         ArtworkType.AUDIO,
@@ -138,19 +165,16 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         quality: 100,
       );
 
-      // 3. If bytes exist, write to file and update MediaItem
+      // --- SAVE & UPDATE ---
       if (bytes != null && bytes.isNotEmpty) {
         await artworkFile.writeAsBytes(bytes);
-
-        // Update the current MediaItem with the physical file path
         mediaItem.add(item.copyWith(artUri: Uri.file(artworkFile.path)));
       } else {
-        // Clear artwork if none exists to avoid showing previous song's art
+        // No artwork? Clear the URI so it doesn't show previous song's art
         mediaItem.add(item.copyWith(artUri: null));
       }
     } catch (e) {
-      debugPrint("Error generating standalone thumbnail: $e");
-      // Fallback: don't crash, just show no art
+      debugPrint("Error generating notification thumbnail: $e");
       mediaItem.add(item.copyWith(artUri: null));
     }
   }
@@ -217,6 +241,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
     final audioSources = songs.map((item) {
       final path = item.extras?['url'] as String;
+      // Use Uri.file to handle special characters in paths correctly
       return AudioSource.uri(Uri.file(path), tag: item);
     }).toList();
 
@@ -245,7 +270,6 @@ class AudioProvider extends ChangeNotifier {
   SongModel? get currentSong {
     final mediaItem = _audioHandler.mediaItem.value;
     if (mediaItem == null) return null;
-
     try {
       return _songs.firstWhere((s) => s.id.toString() == mediaItem.id);
     } catch (e) {
@@ -283,8 +307,8 @@ class AudioProvider extends ChangeNotifier {
       return;
     }
 
-    // Initial load: We do NOT load artwork here to keep it fast.
-    // The AudioHandler will load artwork individually as they play.
+    // Initial load: ArtUri is NULL.
+    // It will be filled by _updateNotificationWithArtwork in MyAudioHandler.
     final mediaItems = _songs.map((song) {
       return MediaItem(
         id: song.id.toString(),
@@ -292,7 +316,7 @@ class AudioProvider extends ChangeNotifier {
         title: song.title,
         artist: song.artist ?? "Unknown Artist",
         duration: Duration(milliseconds: song.duration ?? 0),
-        artUri: null, // intentionally null, loaded lazily in AudioHandler
+        artUri: null,
         extras: {'url': song.data},
       );
     }).toList();
