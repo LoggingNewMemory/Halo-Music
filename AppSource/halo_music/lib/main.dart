@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection'; // Added for LRU Cache
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:audio_service/audio_service.dart';
@@ -143,7 +144,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   // OPTIMIZATION 1: Use Temporary Directory
   Future<Directory> _getArtworkCacheDirectory() async {
-    // Switch to getTemporaryDirectory so OS can clear it if storage is low
     final tempDir = await getTemporaryDirectory();
     final artworkDir = Directory('${tempDir.path}/artwork_cache');
     if (!await artworkDir.exists()) {
@@ -175,14 +175,12 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         return;
       }
 
-      // OPTIMIZATION 2: Reduce Quality and Size
-      // Notifications are small. We don't need 1000px images.
       final Uint8List? bytes = await _audioQuery.queryArtwork(
         songId,
         ArtworkType.AUDIO,
         format: ArtworkFormat.JPEG,
-        size: 300, // Reduced from 1000
-        quality: 75, // Reduced from 100
+        size: 300,
+        quality: 75,
       );
 
       if (bytes != null && bytes.isNotEmpty) {
@@ -208,6 +206,8 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         MediaAction.seek,
         MediaAction.seekForward,
         MediaAction.seekBackward,
+        MediaAction.setShuffleMode,
+        MediaAction.setRepeatMode,
       },
       androidCompactActionIndices: const [0, 1, 3],
       processingState: const {
@@ -222,6 +222,15 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       bufferedPosition: _player.bufferedPosition,
       speed: _player.speed,
       queueIndex: event.currentIndex,
+      // Map JustAudio states to AudioService states
+      repeatMode: const {
+        LoopMode.off: AudioServiceRepeatMode.none,
+        LoopMode.one: AudioServiceRepeatMode.one,
+        LoopMode.all: AudioServiceRepeatMode.all,
+      }[_player.loopMode]!,
+      shuffleMode: _player.shuffleModeEnabled
+          ? AudioServiceShuffleMode.all
+          : AudioServiceShuffleMode.none,
     );
   }
 
@@ -244,6 +253,32 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (!_player.playing) _player.play();
   }
 
+  @override
+  Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async {
+    switch (repeatMode) {
+      case AudioServiceRepeatMode.none:
+        await _player.setLoopMode(LoopMode.off);
+        break;
+      case AudioServiceRepeatMode.one:
+        await _player.setLoopMode(LoopMode.one);
+        break;
+      case AudioServiceRepeatMode.group:
+      case AudioServiceRepeatMode.all:
+        await _player.setLoopMode(LoopMode.all);
+        break;
+    }
+  }
+
+  @override
+  Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) async {
+    if (shuffleMode == AudioServiceShuffleMode.none) {
+      await _player.setShuffleModeEnabled(false);
+    } else {
+      await _player.setShuffleModeEnabled(true);
+      await _player.shuffle(); // Trigger shuffle immediately
+    }
+  }
+
   Future<void> setPlaylist(List<MediaItem> songs) async {
     queue.add(songs);
     final audioSources = songs
@@ -251,9 +286,10 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
           (item) => AudioSource.uri(Uri.file(item.extras?['url']), tag: item),
         )
         .toList();
-    await _player.setAudioSource(
-      ConcatenatingAudioSource(children: audioSources),
-    );
+
+    // Define the sequence
+    final playlist = ConcatenatingAudioSource(children: audioSources);
+    await _player.setAudioSource(playlist);
   }
 }
 
@@ -268,22 +304,37 @@ class AudioProvider extends ChangeNotifier {
   List<SongModel> _allSongs = [];
   List<SongModel> _displayedSongs = [];
 
+  // Playlist State
+  Map<String, List<int>> _playlists = {};
+  Map<String, List<int>> get playlists => _playlists;
+
   bool _hasPermission = false;
   SortType _currentSort = SortType.dateNewest;
 
-  // OPTIMIZATION 3: LRU Cache (LinkedHashMap)
-  // Replaces the standard Map to limit memory usage
+  // Sleep Timer
+  Timer? _sleepTimer;
+  DateTime? _sleepTimeEnd;
+
+  // Cache
   static const int _maxCacheSize = 50;
   final LinkedHashMap<int, Uint8List?> _artworkMemoryCache = LinkedHashMap();
 
   AudioProvider(this._audioHandler) {
     _audioHandler.mediaItem.listen((_) => notifyListeners());
+    _loadPlaylists();
   }
 
   List<SongModel> get songs => _displayedSongs;
   bool get hasPermission => _hasPermission;
   AudioHandler get audioHandler => _audioHandler;
   SortType get currentSort => _currentSort;
+  bool get isSleepTimerActive => _sleepTimer != null && _sleepTimer!.isActive;
+  String get timeUntilSleep {
+    if (_sleepTimeEnd == null) return "";
+    final remaining = _sleepTimeEnd!.difference(DateTime.now());
+    if (remaining.isNegative) return "0:00";
+    return "${remaining.inMinutes}:${(remaining.inSeconds % 60).toString().padLeft(2, '0')}";
+  }
 
   SongModel? get currentSong {
     final mediaItem = _audioHandler.mediaItem.value;
@@ -295,10 +346,124 @@ class AudioProvider extends ChangeNotifier {
     }
   }
 
+  // --- PLAYLIST LOGIC ---
+
+  Future<void> _loadPlaylists() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/playlists.json');
+      if (await file.exists()) {
+        final String content = await file.readAsString();
+        final Map<String, dynamic> json = jsonDecode(content);
+        // Convert dynamic list to int list
+        _playlists = json.map(
+          (key, value) => MapEntry(key, List<int>.from(value)),
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error loading playlists: $e");
+    }
+  }
+
+  Future<void> _savePlaylists() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/playlists.json');
+      await file.writeAsString(jsonEncode(_playlists));
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error saving playlists: $e");
+    }
+  }
+
+  void createPlaylist(String name) {
+    if (!_playlists.containsKey(name)) {
+      _playlists[name] = [];
+      _savePlaylists();
+    }
+  }
+
+  void deletePlaylist(String name) {
+    _playlists.remove(name);
+    _savePlaylists();
+  }
+
+  void addToPlaylist(String playlistName, int songId) {
+    if (_playlists.containsKey(playlistName)) {
+      if (!_playlists[playlistName]!.contains(songId)) {
+        _playlists[playlistName]!.add(songId);
+        _savePlaylists();
+      }
+    }
+  }
+
+  void removeFromPlaylist(String playlistName, int songId) {
+    if (_playlists.containsKey(playlistName)) {
+      _playlists[playlistName]!.remove(songId);
+      _savePlaylists();
+    }
+  }
+
+  Future<void> playPlaylist(String playlistName) async {
+    if (!_playlists.containsKey(playlistName)) return;
+
+    final songIds = _playlists[playlistName]!;
+    if (songIds.isEmpty) return;
+
+    final playlistSongs = _allSongs
+        .where((s) => songIds.contains(s.id))
+        .toList();
+
+    if (playlistSongs.isEmpty) return;
+
+    final mediaItems = playlistSongs.map((song) {
+      return MediaItem(
+        id: song.id.toString(),
+        album: song.album ?? "Unknown Album",
+        title: song.title,
+        artist: song.artist ?? "Unknown Artist",
+        duration: Duration(milliseconds: song.duration ?? 0),
+        artUri: null,
+        extras: {'url': song.data},
+      );
+    }).toList();
+
+    if (_audioHandler is MyAudioHandler) {
+      await (_audioHandler as MyAudioHandler).setPlaylist(mediaItems);
+      await _audioHandler.play();
+    }
+  }
+
+  List<SongModel> getSongsInPlaylist(String playlistName) {
+    if (!_playlists.containsKey(playlistName)) return [];
+    final ids = _playlists[playlistName]!;
+    return _allSongs.where((s) => ids.contains(s.id)).toList();
+  }
+
+  // --- SLEEP TIMER ---
+
+  void setSleepTimer(Duration duration) {
+    cancelSleepTimer();
+    _sleepTimeEnd = DateTime.now().add(duration);
+    _sleepTimer = Timer(duration, () {
+      _audioHandler.pause();
+      cancelSleepTimer();
+    });
+    notifyListeners();
+  }
+
+  void cancelSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepTimeEnd = null;
+    notifyListeners();
+  }
+
+  // --- ARTWORK ---
+
   Future<Uint8List?> getArtworkBytes(int id) async {
-    // Check if in cache
     if (_artworkMemoryCache.containsKey(id)) {
-      // Move to end (most recently used)
       final data = _artworkMemoryCache.remove(id);
       _artworkMemoryCache[id] = data;
       return data;
@@ -313,17 +478,12 @@ class AudioProvider extends ChangeNotifier {
         quality: 80,
       );
 
-      // Add to cache
       _artworkMemoryCache[id] = bytes;
-
-      // Enforce Max Size (LRU Eviction)
       if (_artworkMemoryCache.length > _maxCacheSize) {
         _artworkMemoryCache.remove(_artworkMemoryCache.keys.first);
       }
-
       return bytes;
     } catch (e) {
-      // Don't cache errors excessively, but return null
       return null;
     }
   }
@@ -336,11 +496,10 @@ class AudioProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> initSongs({bool forceRefresh = false}) async {
-    if (_audioHandler.playbackState.value.playing) {
-      await _audioHandler.pause();
-    }
+  // --- INITIALIZATION ---
 
+  Future<void> initSongs({bool forceRefresh = false}) async {
+    // Permission request logic
     Map<Permission, PermissionStatus> statuses = await [
       Permission.audio,
       Permission.storage,
@@ -377,20 +536,23 @@ class AudioProvider extends ChangeNotifier {
       return;
     }
 
-    final mediaItems = _allSongs.map((song) {
-      return MediaItem(
-        id: song.id.toString(),
-        album: song.album ?? "Unknown Album",
-        title: song.title,
-        artist: song.artist ?? "Unknown Artist",
-        duration: Duration(milliseconds: song.duration ?? 0),
-        artUri: null,
-        extras: {'url': song.data},
-      );
-    }).toList();
+    // Only set playlist initially if the queue is empty
+    if (_audioHandler.queue.value.isEmpty) {
+      final mediaItems = _allSongs.map((song) {
+        return MediaItem(
+          id: song.id.toString(),
+          album: song.album ?? "Unknown Album",
+          title: song.title,
+          artist: song.artist ?? "Unknown Artist",
+          duration: Duration(milliseconds: song.duration ?? 0),
+          artUri: null,
+          extras: {'url': song.data},
+        );
+      }).toList();
 
-    if (_audioHandler is MyAudioHandler) {
-      await (_audioHandler as MyAudioHandler).setPlaylist(mediaItems);
+      if (_audioHandler is MyAudioHandler) {
+        await (_audioHandler as MyAudioHandler).setPlaylist(mediaItems);
+      }
     }
 
     notifyListeners();
@@ -456,10 +618,28 @@ class AudioProvider extends ChangeNotifier {
 
   Future<void> playSong(int index) async {
     final songToPlay = _displayedSongs[index];
-    final originalIndex = _allSongs.indexOf(songToPlay);
+    // Find index in global list because queue usually matches global list (or shuffled version)
+    // If user is searching, we might need to reset playlist to displayed songs?
+    // For simplicity, we assume queue matches _allSongs initially.
 
-    if (originalIndex != -1) {
-      await _audioHandler.skipToQueueItem(originalIndex);
+    // Better Approach: Reset queue to displayed songs and play
+    final mediaItems = _displayedSongs.map((song) {
+      return MediaItem(
+        id: song.id.toString(),
+        album: song.album ?? "Unknown Album",
+        title: song.title,
+        artist: song.artist ?? "Unknown Artist",
+        duration: Duration(milliseconds: song.duration ?? 0),
+        artUri: null,
+        extras: {'url': song.data},
+      );
+    }).toList();
+
+    if (_audioHandler is MyAudioHandler) {
+      // Note: This resets the queue on every tap, which allows playing from search results correctly
+      await (_audioHandler as MyAudioHandler).setPlaylist(mediaItems);
+      await _audioHandler.skipToQueueItem(index);
+      await _audioHandler.play();
     }
   }
 
@@ -478,4 +658,32 @@ class AudioProvider extends ChangeNotifier {
 
   void playNext() => _audioHandler.skipToNext();
   void playPrevious() => _audioHandler.skipToPrevious();
+
+  // New controls
+  void toggleShuffle() {
+    final mode = _audioHandler.playbackState.value.shuffleMode;
+    if (mode == AudioServiceShuffleMode.all) {
+      _audioHandler.setShuffleMode(AudioServiceShuffleMode.none);
+    } else {
+      _audioHandler.setShuffleMode(AudioServiceShuffleMode.all);
+    }
+    notifyListeners();
+  }
+
+  void toggleLoop() {
+    final mode = _audioHandler.playbackState.value.repeatMode;
+    switch (mode) {
+      case AudioServiceRepeatMode.none:
+        _audioHandler.setRepeatMode(AudioServiceRepeatMode.all);
+        break;
+      case AudioServiceRepeatMode.all:
+      case AudioServiceRepeatMode.group:
+        _audioHandler.setRepeatMode(AudioServiceRepeatMode.one);
+        break;
+      case AudioServiceRepeatMode.one:
+        _audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
+        break;
+    }
+    notifyListeners();
+  }
 }

@@ -135,28 +135,35 @@ class PlayerUI extends StatelessWidget {
 
                 const SizedBox(height: 48),
 
-                // --- Song Title ---
-                Text(
-                  song.title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: textColor,
-                    fontWeight: FontWeight.bold,
+                // --- Song Title (Marquee) ---
+                SizedBox(
+                  height: 35,
+                  child: MarqueeWidget(
+                    child: Text(
+                      song.title,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            color: textColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
 
-                // --- Artist ---
-                Text(
-                  song.artist ?? "Unknown Artist",
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: secondaryTextColor),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                // --- Artist (Marquee) ---
+                SizedBox(
+                  height: 25,
+                  child: MarqueeWidget(
+                    child: Text(
+                      song.artist ?? "Unknown Artist",
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: secondaryTextColor,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ),
 
                 const SizedBox(height: 16),
@@ -176,25 +183,43 @@ class PlayerUI extends StatelessWidget {
                 const SizedBox(height: 24),
 
                 // --- Controls ---
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      iconSize: 45,
-                      icon: const Icon(
-                        Icons.skip_previous_rounded,
-                        color: Colors.white,
-                      ),
-                      onPressed: provider.playPrevious,
-                    ),
-                    const SizedBox(width: 24),
+                StreamBuilder<PlaybackState>(
+                  stream: provider.playbackStateStream,
+                  builder: (context, snapshot) {
+                    final playbackState = snapshot.data;
+                    final playing = playbackState?.playing ?? false;
+                    final shuffleMode =
+                        playbackState?.shuffleMode ??
+                        AudioServiceShuffleMode.none;
+                    final repeatMode =
+                        playbackState?.repeatMode ??
+                        AudioServiceRepeatMode.none;
 
-                    // Play/Pause
-                    StreamBuilder<PlaybackState>(
-                      stream: provider.playbackStateStream,
-                      builder: (context, snapshot) {
-                        final playing = snapshot.data?.playing ?? false;
-                        return Container(
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Shuffle Button
+                        IconButton(
+                          icon: Icon(
+                            Icons.shuffle,
+                            color: shuffleMode == AudioServiceShuffleMode.all
+                                ? colorScheme.primary
+                                : Colors.white60,
+                          ),
+                          onPressed: provider.toggleShuffle,
+                        ),
+
+                        IconButton(
+                          iconSize: 45,
+                          icon: const Icon(
+                            Icons.skip_previous_rounded,
+                            color: Colors.white,
+                          ),
+                          onPressed: provider.playPrevious,
+                        ),
+
+                        // Play/Pause
+                        Container(
                           height: 72,
                           width: 72,
                           decoration: BoxDecoration(
@@ -219,20 +244,32 @@ class PlayerUI extends StatelessWidget {
                             ),
                             onPressed: provider.togglePlay,
                           ),
-                        );
-                      },
-                    ),
+                        ),
 
-                    const SizedBox(width: 24),
-                    IconButton(
-                      iconSize: 45,
-                      icon: const Icon(
-                        Icons.skip_next_rounded,
-                        color: Colors.white,
-                      ),
-                      onPressed: provider.playNext,
-                    ),
-                  ],
+                        IconButton(
+                          iconSize: 45,
+                          icon: const Icon(
+                            Icons.skip_next_rounded,
+                            color: Colors.white,
+                          ),
+                          onPressed: provider.playNext,
+                        ),
+
+                        // Loop Button
+                        IconButton(
+                          icon: Icon(
+                            repeatMode == AudioServiceRepeatMode.one
+                                ? Icons.repeat_one_rounded
+                                : Icons.repeat_rounded,
+                            color: repeatMode != AudioServiceRepeatMode.none
+                                ? colorScheme.primary
+                                : Colors.white60,
+                          ),
+                          onPressed: provider.toggleLoop,
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 const Spacer(),
@@ -241,6 +278,71 @@ class PlayerUI extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// --- Custom Marquee Widget ---
+class MarqueeWidget extends StatefulWidget {
+  final Widget child;
+  final Duration pauseDuration;
+  final Duration animationDuration;
+
+  const MarqueeWidget({
+    super.key,
+    required this.child,
+    this.pauseDuration = const Duration(seconds: 2),
+    this.animationDuration = const Duration(seconds: 4),
+  });
+
+  @override
+  State<MarqueeWidget> createState() => _MarqueeWidgetState();
+}
+
+class _MarqueeWidgetState extends State<MarqueeWidget> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _animate());
+  }
+
+  void _animate() async {
+    if (!_scrollController.hasClients) return;
+
+    // Only animate if the text is wider than the screen
+    if (_scrollController.position.maxScrollExtent > 0) {
+      await Future.delayed(widget.pauseDuration);
+      if (_scrollController.hasClients) {
+        await _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: widget.animationDuration,
+          curve: Curves.linear,
+        );
+      }
+      await Future.delayed(widget.pauseDuration);
+      if (_scrollController.hasClients) {
+        // Jump back to start
+        _scrollController.jumpTo(0.0);
+        _animate();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _scrollController,
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
+      child: widget.child,
     );
   }
 }
@@ -304,7 +406,6 @@ class _FormatBadgeState extends State<_FormatBadge> {
             bits = data['bits']!;
           }
         } else {
-          // Fallback for MP3/AAC (Standard compressed usually 44.1/16 equiv)
           rate = 44100;
           bits = 16;
         }
@@ -313,11 +414,8 @@ class _FormatBadgeState extends State<_FormatBadge> {
       debugPrint("Error reading metadata: $e");
     }
 
-    // Hi-Res Logic: Usually defined as > 16-bit or > 48kHz
-    // Common Hi-Res: 24-bit/48kHz, 24-bit/96kHz, etc.
     final isHiRes = (rate > 48000) || (bits > 16);
 
-    // Format strings
     String rateStr = (rate >= 1000)
         ? "${(rate / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}kHz"
         : "${rate}Hz";
@@ -333,15 +431,12 @@ class _FormatBadgeState extends State<_FormatBadge> {
   }
 
   // Pure Dart FLAC Header Parser
-  // Reads the STREAMINFO block to get exact Hz and Bits
   Future<Map<String, int>?> _parseFlacHeader(File file) async {
     try {
       final raf = await file.open(mode: FileMode.read);
-      // Read first 42 bytes (Header + StreamInfo)
       final bytes = await raf.read(42);
       await raf.close();
 
-      // Check 'fLaC' signature
       if (bytes[0] != 0x66 ||
           bytes[1] != 0x4C ||
           bytes[2] != 0x61 ||
@@ -349,34 +444,12 @@ class _FormatBadgeState extends State<_FormatBadge> {
         return null;
       }
 
-      // StreamInfo block starts at byte 8 (after fLaC + 4 byte block header)
-      // Actually block header is 4 bytes.
-      // Metadata Block Header (4 bytes):
-      // [0]: LastBlockFlag(1) + BlockType(7). Type 0 = StreamInfo.
-      // [1-3]: Length(24). StreamInfo length is 34.
-      // Data starts at index 8.
+      final b0 = bytes[18];
+      final b1 = bytes[19];
+      final b2 = bytes[20];
+      final b3 = bytes[21];
 
-      // Relevant data is at the end of the 34-byte block.
-      // Bytes 10-12 relative to data start contain SampleRate.
-      // File Absolute Index = 8 (header end) + 10 = 18.
-
-      // Layout from FLAC Spec:
-      // ...
-      // Sample Rate: 20 bits
-      // Channels: 3 bits
-      // Bits Per Sample: 5 bits
-      // Total Samples: 36 bits
-
-      // We need absolute bytes 18, 19, 20, 21.
-      final b0 = bytes[18]; // SR high
-      final b1 = bytes[19]; // SR mid
-      final b2 = bytes[20]; // SR low + Channels + BPS high
-      final b3 = bytes[21]; // BPS low + Total Samples
-
-      // Sample Rate (20 bits): b0 + b1 + high 4 of b2
       final sampleRate = (b0 << 12) | (b1 << 4) | ((b2 & 0xF0) >> 4);
-
-      // Bits Per Sample (5 bits): last bit of b2 + high 4 of b3
       final bps = ((b2 & 0x01) << 4) | ((b3 & 0xF0) >> 4) + 1;
 
       return {'rate': sampleRate, 'bits': bps};
@@ -389,18 +462,14 @@ class _FormatBadgeState extends State<_FormatBadge> {
   Future<Map<String, int>?> _parseWavHeader(File file) async {
     try {
       final raf = await file.open(mode: FileMode.read);
-      final bytes = await raf.read(44); // Standard WAV header size
+      final bytes = await raf.read(44);
       await raf.close();
 
-      // Check 'RIFF'
       if (bytes[0] != 0x52 || bytes[1] != 0x49) return null;
 
-      // Check 'fmt ' at offset 12
-      // Sample Rate at offset 24 (4 bytes, little endian)
       final sampleRate =
           bytes[24] | (bytes[25] << 8) | (bytes[26] << 16) | (bytes[27] << 24);
 
-      // Bits Per Sample at offset 34 (2 bytes, little endian)
       final bitsPerSample = bytes[34] | (bytes[35] << 8);
 
       return {'rate': sampleRate, 'bits': bitsPerSample};
@@ -417,14 +486,11 @@ class _FormatBadgeState extends State<_FormatBadge> {
         .toUpperCase()
         .replaceAll(RegExp(r'[^A-Z0-9]'), '');
 
-    // Calculate Average Bitrate (Realtime calculation)
-    // For FLAC this is compressed bitrate (file size), not PCM bitrate.
     final int bitrate =
         (widget.song.duration != null && widget.song.duration! > 0)
         ? ((widget.song.size * 8) / widget.song.duration!).round()
         : 0;
 
-    // Common Text Style
     final textStyle = TextStyle(
       color: _isHiRes ? widget.colorScheme.primary : Colors.white70,
       fontWeight: _isHiRes ? FontWeight.bold : FontWeight.w500,

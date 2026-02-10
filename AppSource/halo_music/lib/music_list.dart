@@ -9,6 +9,7 @@ import 'l10n/app_localizations.dart';
 import 'main.dart';
 import 'player_ui.dart';
 import 'settings_ui.dart';
+import 'playlist_screen.dart'; // Import the new file
 
 class MusicListScreen extends StatefulWidget {
   const MusicListScreen({super.key});
@@ -48,6 +49,14 @@ class _MusicListScreenState extends State<MusicListScreen> {
         title: Text(l10n.appTitle),
         centerTitle: false,
         actions: [
+          // Sleep Timer Button
+          IconButton(
+            icon: Icon(
+              provider.isSleepTimerActive ? Icons.timer : Icons.timer_outlined,
+              color: provider.isSleepTimerActive ? colorScheme.primary : null,
+            ),
+            onPressed: () => _showSleepTimerDialog(context, provider),
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
@@ -85,6 +94,11 @@ class _MusicListScreenState extends State<MusicListScreen> {
                           return _CachedSongTile(
                             song: song,
                             onTap: () => provider.playSong(index),
+                            onLongPress: () => _showAddToPlaylistDialog(
+                              context,
+                              provider,
+                              song,
+                            ),
                           );
                         },
                       ),
@@ -104,6 +118,160 @@ class _MusicListScreenState extends State<MusicListScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  void _showSleepTimerDialog(BuildContext context, AudioProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Sleep Timer"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (provider.isSleepTimerActive)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Text(
+                    "Stopping in: ${provider.timeUntilSleep}",
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ActionChip(
+                    label: const Text("15 min"),
+                    onPressed: () {
+                      provider.setSleepTimer(const Duration(minutes: 15));
+                      Navigator.pop(context);
+                    },
+                  ),
+                  ActionChip(
+                    label: const Text("30 min"),
+                    onPressed: () {
+                      provider.setSleepTimer(const Duration(minutes: 30));
+                      Navigator.pop(context);
+                    },
+                  ),
+                  ActionChip(
+                    label: const Text("60 min"),
+                    onPressed: () {
+                      provider.setSleepTimer(const Duration(minutes: 60));
+                      Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            if (provider.isSleepTimerActive)
+              TextButton(
+                onPressed: () {
+                  provider.cancelSleepTimer();
+                  Navigator.pop(context);
+                },
+                child: const Text(
+                  "Turn Off",
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Close"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showAddToPlaylistDialog(
+    BuildContext context,
+    AudioProvider provider,
+    SongModel song,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        final playlists = provider.playlists.keys.toList();
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Add to Playlist",
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text("New Playlist"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreatePlaylistDialog(context, provider, songId: song.id);
+                },
+              ),
+              const Divider(),
+              ...playlists.map(
+                (name) => ListTile(
+                  leading: const Icon(Icons.playlist_play),
+                  title: Text(name),
+                  onTap: () {
+                    provider.addToPlaylist(name, song.id);
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text("Added to $name")));
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCreatePlaylistDialog(
+    BuildContext context,
+    AudioProvider provider, {
+    int? songId,
+  }) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("New Playlist"),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(hintText: "Playlist Name"),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                if (controller.text.isNotEmpty) {
+                  provider.createPlaylist(controller.text);
+                  if (songId != null) {
+                    provider.addToPlaylist(controller.text, songId);
+                  }
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text("Create"),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -142,7 +310,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
               child: Hero(
                 tag: 'mini_player_art',
                 child: ClipOval(
-                  // FIX: Use FutureBuilder + Memory Cache instead of QueryArtworkWidget
                   child: FutureBuilder<Uint8List?>(
                     future: provider.getArtworkBytes(song.id),
                     builder: (context, snapshot) {
@@ -152,7 +319,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
                           width: 56,
                           height: 56,
                           fit: BoxFit.cover,
-                          gaplessPlayback: true, // Prevents flickering
+                          gaplessPlayback: true,
                         );
                       }
                       return Container(
@@ -279,6 +446,18 @@ class _MusicListScreenState extends State<MusicListScreen> {
             FontAwesomeIcons.arrowDownAZ,
             onTap: () => _showSortBottomSheet(context, provider),
           ),
+          const SizedBox(width: 8),
+          // Playlist Button
+          _topButton(
+            context,
+            FontAwesomeIcons.list,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PlaylistScreen()),
+              );
+            },
+          ),
           const Spacer(),
           _topButton(
             context,
@@ -287,7 +466,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
               provider.initSongs(forceRefresh: true);
             },
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
           _topButton(
             context,
             FontAwesomeIcons.magnifyingGlass,
@@ -452,8 +631,13 @@ class _MusicListScreenState extends State<MusicListScreen> {
 class _CachedSongTile extends StatelessWidget {
   final SongModel song;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
-  const _CachedSongTile({required this.song, required this.onTap});
+  const _CachedSongTile({
+    required this.song,
+    required this.onTap,
+    this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -506,6 +690,7 @@ class _CachedSongTile extends StatelessWidget {
         style: TextStyle(color: colorScheme.outline),
       ),
       onTap: onTap,
+      onLongPress: onLongPress,
     );
   }
 
