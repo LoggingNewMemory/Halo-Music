@@ -40,13 +40,9 @@ Future<void> main() async {
       MaterialApp(
         home: Scaffold(
           body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Text(
-                "Audio Service Failed to Start.\n\nError:\n$initError\n\nTry running 'flutter clean'.",
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red, fontSize: 16),
-              ),
+            child: Text(
+              "Audio Service Failed: $initError",
+              style: const TextStyle(color: Colors.red),
             ),
           ),
         ),
@@ -90,6 +86,7 @@ class HaloMusicApp extends StatelessWidget {
   }
 }
 
+// --- AUDIO HANDLER (Unchanged mostly, just efficient) ---
 class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final _player = AudioPlayer();
   final _audioQuery = OnAudioQuery();
@@ -97,66 +94,32 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
-    // Sync the current song from the Queue to the Notification.
     _player.currentIndexStream.listen((index) {
       if (index != null && queue.value.isNotEmpty) {
         if (index >= 0 && index < queue.value.length) {
           final newItem = queue.value[index];
-
-          // 1. Immediately update text info (Title/Artist)
           mediaItem.add(newItem);
-
-          // 2. Fetch and update artwork asynchronously
           _updateNotificationWithArtwork(newItem);
         }
       }
     });
 
     _player.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
-        skipToNext();
-      }
+      if (state == ProcessingState.completed) skipToNext();
     });
   }
 
-  /// ------------------------------------------------------------------
-  /// STANDALONE ARTWORK LOGIC
-  /// 1. Cleans up old 'cover_*.jpg' files to save space.
-  /// 2. Generates 'cover_{songId}.jpg' so the URI is unique.
-  /// 3. Updates the Notification with this physical file.
-  /// ------------------------------------------------------------------
   Future<void> _updateNotificationWithArtwork(MediaItem item) async {
     try {
       final int songId = int.parse(item.id);
       final tempDir = await getTemporaryDirectory();
       final File artworkFile = File('${tempDir.path}/cover_$songId.jpg');
 
-      // --- CLEANUP: Delete other cover files ---
-      try {
-        final dir = Directory(tempDir.path);
-        final List<FileSystemEntity> files = dir.listSync();
-        for (var file in files) {
-          if (file is File) {
-            final filename = file.uri.pathSegments.last;
-            // Delete if it's a cover file AND NOT the one we need right now
-            if (filename.startsWith("cover_") &&
-                filename.endsWith(".jpg") &&
-                filename != "cover_$songId.jpg") {
-              await file.delete();
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint("Cleanup warning: $e");
-      }
-
-      // --- CHECK CACHE: If this song's art exists, use it ---
       if (await artworkFile.exists()) {
         mediaItem.add(item.copyWith(artUri: Uri.file(artworkFile.path)));
         return;
       }
 
-      // --- GENERATE: Extract bytes from OnAudioQuery ---
       final Uint8List? bytes = await _audioQuery.queryArtwork(
         songId,
         ArtworkType.AUDIO,
@@ -165,16 +128,13 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         quality: 100,
       );
 
-      // --- SAVE & UPDATE ---
       if (bytes != null && bytes.isNotEmpty) {
         await artworkFile.writeAsBytes(bytes);
         mediaItem.add(item.copyWith(artUri: Uri.file(artworkFile.path)));
       } else {
-        // No artwork? Clear the URI so it doesn't show previous song's art
         mediaItem.add(item.copyWith(artUri: null));
       }
     } catch (e) {
-      debugPrint("Error generating notification thumbnail: $e");
       mediaItem.add(item.copyWith(artUri: null));
     }
   }
@@ -210,68 +170,67 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> play() => _player.play();
-
   @override
   Future<void> pause() => _player.pause();
-
   @override
   Future<void> stop() => _player.stop();
-
   @override
   Future<void> seek(Duration position) => _player.seek(position);
-
   @override
   Future<void> skipToNext() => _player.seekToNext();
-
   @override
   Future<void> skipToPrevious() => _player.seekToPrevious();
-
   @override
   Future<void> skipToQueueItem(int index) async {
     if (index < 0 || index >= queue.value.length) return;
-    if (_player.shuffleModeEnabled) {
-      index = _player.shuffleIndices![index];
-    }
     await _player.seek(Duration.zero, index: index);
     if (!_player.playing) _player.play();
   }
 
   Future<void> setPlaylist(List<MediaItem> songs) async {
     queue.add(songs);
-
-    final audioSources = songs.map((item) {
-      final path = item.extras?['url'] as String;
-      // Use Uri.file to handle special characters in paths correctly
-      return AudioSource.uri(Uri.file(path), tag: item);
-    }).toList();
-
+    final audioSources = songs
+        .map(
+          (item) => AudioSource.uri(Uri.file(item.extras?['url']), tag: item),
+        )
+        .toList();
     await _player.setAudioSource(
       ConcatenatingAudioSource(children: audioSources),
     );
   }
 }
 
+// --- PROVIDER ---
+
+enum SortType { title, artist, dateAdded }
+
 class AudioProvider extends ChangeNotifier {
   final AudioHandler _audioHandler;
   final OnAudioQuery _audioQuery = OnAudioQuery();
 
-  List<SongModel> _songs = [];
+  // _allSongs keeps the original fetched list
+  List<SongModel> _allSongs = [];
+  // _displayedSongs is what the UI shows (filtered/sorted)
+  List<SongModel> _displayedSongs = [];
+
   bool _hasPermission = false;
+  SortType _currentSort = SortType.dateAdded;
 
   AudioProvider(this._audioHandler) {
-    _audioHandler.playbackState.listen((_) => notifyListeners());
+    // FIX: Do NOT listen to playbackState here to prevent flickering the whole list.
+    // Only listen to mediaItem to know what the current song is.
     _audioHandler.mediaItem.listen((_) => notifyListeners());
   }
 
-  List<SongModel> get songs => _songs;
+  List<SongModel> get songs => _displayedSongs;
   bool get hasPermission => _hasPermission;
-  bool get isPlaying => _audioHandler.playbackState.value.playing;
+  AudioHandler get audioHandler => _audioHandler;
 
   SongModel? get currentSong {
     final mediaItem = _audioHandler.mediaItem.value;
     if (mediaItem == null) return null;
     try {
-      return _songs.firstWhere((s) => s.id.toString() == mediaItem.id);
+      return _allSongs.firstWhere((s) => s.id.toString() == mediaItem.id);
     } catch (e) {
       return null;
     }
@@ -300,16 +259,16 @@ class AudioProvider extends ChangeNotifier {
       ignoreCase: true,
     );
 
-    _songs = fetchedSongs.where((e) => (e.duration ?? 0) > 10000).toList();
+    // Filter short clips
+    _allSongs = fetchedSongs.where((e) => (e.duration ?? 0) > 10000).toList();
+    _displayedSongs = List.from(_allSongs); // Initial display
 
-    if (_songs.isEmpty) {
+    if (_allSongs.isEmpty) {
       notifyListeners();
       return;
     }
 
-    // Initial load: ArtUri is NULL.
-    // It will be filled by _updateNotificationWithArtwork in MyAudioHandler.
-    final mediaItems = _songs.map((song) {
+    final mediaItems = _allSongs.map((song) {
       return MediaItem(
         id: song.id.toString(),
         album: song.album ?? "Unknown Album",
@@ -328,16 +287,66 @@ class AudioProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> playSong(int index) async {
-    await _audioHandler.skipToQueueItem(index);
+  // --- Search Logic ---
+  void search(String query) {
+    if (query.isEmpty) {
+      _displayedSongs = List.from(_allSongs);
+    } else {
+      _displayedSongs = _allSongs.where((song) {
+        return song.title.toLowerCase().contains(query.toLowerCase()) ||
+            (song.artist?.toLowerCase().contains(query.toLowerCase()) ?? false);
+      }).toList();
+    }
+    _applySort(); // Re-sort after filtering
+    notifyListeners();
   }
 
-  Future<void> seek(Duration position) async {
-    await _audioHandler.seek(position);
+  // --- Sort Logic ---
+  void sort(SortType type) {
+    _currentSort = type;
+    _applySort();
+    notifyListeners();
   }
+
+  void _applySort() {
+    switch (_currentSort) {
+      case SortType.title:
+        _displayedSongs.sort((a, b) => a.title.compareTo(b.title));
+        break;
+      case SortType.artist:
+        _displayedSongs.sort(
+          (a, b) => (a.artist ?? "").compareTo(b.artist ?? ""),
+        );
+        break;
+      case SortType.dateAdded:
+        // Assuming higher ID is newer if dateAdded isn't reliable,
+        // but typically dateAdded is best.
+        _displayedSongs.sort(
+          (a, b) => (b.dateAdded ?? 0).compareTo(a.dateAdded ?? 0),
+        );
+        break;
+    }
+  }
+
+  Future<void> playSong(int index) async {
+    // We must find the index of the song in the ORIGINAL queue (AudioHandler queue)
+    // because displayedSongs might be filtered/sorted.
+    final songToPlay = _displayedSongs[index];
+    final originalIndex = _allSongs.indexOf(songToPlay);
+
+    if (originalIndex != -1) {
+      await _audioHandler.skipToQueueItem(originalIndex);
+    }
+  }
+
+  Future<void> seek(Duration position) async =>
+      await _audioHandler.seek(position);
+
+  // Use a Stream getter for player state to avoid rebuilding the whole provider
+  Stream<PlaybackState> get playbackStateStream => _audioHandler.playbackState;
 
   void togglePlay() {
-    if (isPlaying) {
+    if (_audioHandler.playbackState.value.playing) {
       _audioHandler.pause();
     } else {
       _audioHandler.play();

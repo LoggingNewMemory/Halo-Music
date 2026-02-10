@@ -52,20 +52,15 @@ class _MusicListScreenState extends State<MusicListScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _topButton(context, l10n.sort, FontAwesomeIcons.sort),
+                _topButton(context, FontAwesomeIcons.sort),
                 _topButton(
                   context,
-                  l10n.refresh,
                   FontAwesomeIcons.arrowsRotate,
                   onTap: () {
                     provider.initSongs();
                   },
                 ),
-                _topButton(
-                  context,
-                  l10n.search,
-                  FontAwesomeIcons.magnifyingGlass,
-                ),
+                _topButton(context, FontAwesomeIcons.magnifyingGlass),
               ],
             ),
           ),
@@ -146,18 +141,17 @@ class _MusicListScreenState extends State<MusicListScreen> {
 
   Widget _topButton(
     BuildContext context,
-    String text,
     IconData icon, {
     VoidCallback? onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        children: [
-          Icon(icon, size: 20),
-          const SizedBox(height: 4),
-          Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
+      child: Container(
+        color: Colors.transparent, // Ensures the padding area is clickable
+        padding: const EdgeInsets.all(
+          2.0,
+        ), // Reduced from 8.0 to shrink background size
+        child: Icon(icon, size: 15),
       ),
     );
   }

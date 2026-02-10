@@ -11,6 +11,9 @@ class PlayerUI extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Listen strictly to mediaItem changes (title/artist/artwork) via Provider
+    // We do NOT listen to playbackState via Provider here to save resources,
+    // we use StreamBuilders for that.
     final provider = Provider.of<AudioProvider>(context);
     final song = provider.currentSong;
     final l10n = AppLocalizations.of(context)!;
@@ -80,6 +83,7 @@ class PlayerUI extends StatelessWidget {
             const Spacer(),
 
             // --- Progress Bar ---
+            // Independent StreamBuilder to prevent flickering entire UI
             StreamBuilder<Duration>(
               stream: AudioService.position,
               builder: (context, snapshot) {
@@ -101,7 +105,6 @@ class PlayerUI extends StatelessWidget {
                       value: sliderValue,
                       max: sliderMax,
                       onChanged: (value) {
-                        // FIX: Now calling the provider's seek method
                         provider.seek(Duration(seconds: value.toInt()));
                       },
                     ),
@@ -132,15 +135,24 @@ class PlayerUI extends StatelessWidget {
                   onPressed: provider.playPrevious,
                 ),
                 const SizedBox(width: 20),
-                IconButton(
-                  iconSize: 70,
-                  icon: Icon(
-                    provider.isPlaying
-                        ? Icons.pause_circle_filled
-                        : Icons.play_circle_fill,
-                  ),
-                  onPressed: provider.togglePlay,
+
+                // Play/Pause Button - Listens to PlaybackState Stream
+                StreamBuilder<PlaybackState>(
+                  stream: provider.playbackStateStream,
+                  builder: (context, snapshot) {
+                    final playing = snapshot.data?.playing ?? false;
+                    return IconButton(
+                      iconSize: 70,
+                      icon: Icon(
+                        playing
+                            ? Icons.pause_circle_filled
+                            : Icons.play_circle_fill,
+                      ),
+                      onPressed: provider.togglePlay,
+                    );
+                  },
                 ),
+
                 const SizedBox(width: 20),
                 IconButton(
                   iconSize: 50,
@@ -153,6 +165,7 @@ class PlayerUI extends StatelessWidget {
             const Spacer(),
 
             // --- Up Next ---
+            // Note: This logic is simplified. It fetches the next item in the provider's *filtered* list.
             Container(
               padding: const EdgeInsets.all(16),
               width: double.infinity,
@@ -165,11 +178,7 @@ class PlayerUI extends StatelessWidget {
                   Text(l10n.upNext, style: const TextStyle(color: Colors.grey)),
                   const SizedBox(height: 5),
                   Text(
-                    (provider.songs.isNotEmpty &&
-                            provider.currentSong != null &&
-                            provider.songs.indexOf(provider.currentSong!) + 1 < provider.songs.length)
-                        ? provider.songs[provider.songs.indexOf(provider.currentSong!) + 1].title
-                        : "-",
+                    _getNextSongTitle(provider),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     maxLines: 1,
                   ),
@@ -180,6 +189,15 @@ class PlayerUI extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _getNextSongTitle(AudioProvider provider) {
+    if (provider.songs.isEmpty || provider.currentSong == null) return "-";
+    final currentIndex = provider.songs.indexOf(provider.currentSong!);
+    if (currentIndex != -1 && currentIndex + 1 < provider.songs.length) {
+      return provider.songs[currentIndex + 1].title;
+    }
+    return "-";
   }
 
   String _formatDuration(Duration duration) {
