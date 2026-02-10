@@ -92,9 +92,11 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
+    // Sync the current song from the Queue to the Notification.
+    // We use the queue index to ensure the metadata (Title/Artist) matches perfectly.
     _player.currentIndexStream.listen((index) {
       if (index != null && queue.value.isNotEmpty) {
-        if (index < queue.value.length) {
+        if (index >= 0 && index < queue.value.length) {
           mediaItem.add(queue.value[index]);
         }
       }
@@ -166,9 +168,13 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   Future<void> setPlaylist(List<MediaItem> songs) async {
     queue.add(songs);
+
     final audioSources = songs.map((item) {
-      return AudioSource.file(item.id, tag: item);
+      final path = item.extras?['url'] as String;
+      // We keep Uri.file here because it fixes the Japanese file path playback issue
+      return AudioSource.uri(Uri.file(path), tag: item);
     }).toList();
+
     await _player.setAudioSource(
       ConcatenatingAudioSource(children: audioSources),
     );
@@ -192,11 +198,14 @@ class AudioProvider extends ChangeNotifier {
   bool get isPlaying => _audioHandler.playbackState.value.playing;
 
   SongModel? get currentSong {
-    final index = _audioHandler.playbackState.value.queueIndex;
-    if (index != null && index >= 0 && index < _songs.length) {
-      return _songs[index];
+    final mediaItem = _audioHandler.mediaItem.value;
+    if (mediaItem == null) return null;
+
+    try {
+      return _songs.firstWhere((s) => s.id.toString() == mediaItem.id);
+    } catch (e) {
+      return null;
     }
-    return null;
   }
 
   Future<void> initSongs() async {
@@ -230,15 +239,16 @@ class AudioProvider extends ChangeNotifier {
     }
 
     final mediaItems = _songs.map((song) {
+      // FIX: FORCE REMOVE THUMBNAIL
+      // We simply don't calculate the URI and explicitly pass null.
       return MediaItem(
-        id: song.data,
+        id: song.id.toString(),
         album: song.album ?? "Unknown Album",
         title: song.title,
         artist: song.artist ?? "Unknown Artist",
         duration: Duration(milliseconds: song.duration ?? 0),
-        artUri: Uri.tryParse(
-          "content://media/external/audio/albumart/${song.id}",
-        ),
+        artUri: null, // <--- No thumbnail, no problems.
+        extras: {'url': song.data},
       );
     }).toList();
 
