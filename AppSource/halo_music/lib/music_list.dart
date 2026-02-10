@@ -142,22 +142,29 @@ class _MusicListScreenState extends State<MusicListScreen> {
               child: Hero(
                 tag: 'mini_player_art',
                 child: ClipOval(
-                  child: QueryArtworkWidget(
-                    id: song.id,
-                    type: ArtworkType.AUDIO,
-                    artworkHeight: 56,
-                    artworkWidth: 56,
-                    size: 200,
-                    quality: 85,
-                    nullArtworkWidget: Container(
-                      width: 56,
-                      height: 56,
-                      color: colorScheme.secondaryContainer,
-                      child: Icon(
-                        Icons.music_note,
-                        color: colorScheme.onSecondaryContainer,
-                      ),
-                    ),
+                  // FIX: Use FutureBuilder + Memory Cache instead of QueryArtworkWidget
+                  child: FutureBuilder<Uint8List?>(
+                    future: provider.getArtworkBytes(song.id),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData && snapshot.data != null) {
+                        return Image.memory(
+                          snapshot.data!,
+                          width: 56,
+                          height: 56,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true, // Prevents flickering
+                        );
+                      }
+                      return Container(
+                        width: 56,
+                        height: 56,
+                        color: colorScheme.secondaryContainer,
+                        child: Icon(
+                          Icons.music_note,
+                          color: colorScheme.onSecondaryContainer,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -458,7 +465,6 @@ class _CachedSongTile extends StatelessWidget {
       leading: SizedBox(
         width: 50,
         height: 50,
-        // BACK TO CIRCLE (ClipOval)
         child: ClipOval(
           child: FutureBuilder<Uint8List?>(
             future: provider.getArtworkBytes(song.id),

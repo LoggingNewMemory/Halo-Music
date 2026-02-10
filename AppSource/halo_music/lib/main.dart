@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection'; // Added for LRU Cache
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:audio_service/audio_service.dart';
@@ -140,9 +141,11 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     });
   }
 
+  // OPTIMIZATION 1: Use Temporary Directory
   Future<Directory> _getArtworkCacheDirectory() async {
-    final appDir = await getApplicationSupportDirectory();
-    final artworkDir = Directory('${appDir.path}/artwork_cache');
+    // Switch to getTemporaryDirectory so OS can clear it if storage is low
+    final tempDir = await getTemporaryDirectory();
+    final artworkDir = Directory('${tempDir.path}/artwork_cache');
     if (!await artworkDir.exists()) {
       await artworkDir.create(recursive: true);
     }
@@ -172,12 +175,14 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         return;
       }
 
+      // OPTIMIZATION 2: Reduce Quality and Size
+      // Notifications are small. We don't need 1000px images.
       final Uint8List? bytes = await _audioQuery.queryArtwork(
         songId,
         ArtworkType.AUDIO,
         format: ArtworkFormat.JPEG,
-        size: 1000,
-        quality: 100,
+        size: 300, // Reduced from 1000
+        quality: 75, // Reduced from 100
       );
 
       if (bytes != null && bytes.isNotEmpty) {
@@ -266,7 +271,10 @@ class AudioProvider extends ChangeNotifier {
   bool _hasPermission = false;
   SortType _currentSort = SortType.dateNewest;
 
-  final Map<int, Uint8List?> _artworkMemoryCache = {};
+  // OPTIMIZATION 3: LRU Cache (LinkedHashMap)
+  // Replaces the standard Map to limit memory usage
+  static const int _maxCacheSize = 50;
+  final LinkedHashMap<int, Uint8List?> _artworkMemoryCache = LinkedHashMap();
 
   AudioProvider(this._audioHandler) {
     _audioHandler.mediaItem.listen((_) => notifyListeners());
@@ -288,8 +296,12 @@ class AudioProvider extends ChangeNotifier {
   }
 
   Future<Uint8List?> getArtworkBytes(int id) async {
+    // Check if in cache
     if (_artworkMemoryCache.containsKey(id)) {
-      return _artworkMemoryCache[id];
+      // Move to end (most recently used)
+      final data = _artworkMemoryCache.remove(id);
+      _artworkMemoryCache[id] = data;
+      return data;
     }
 
     try {
@@ -300,12 +312,28 @@ class AudioProvider extends ChangeNotifier {
         size: 200,
         quality: 80,
       );
+
+      // Add to cache
       _artworkMemoryCache[id] = bytes;
+
+      // Enforce Max Size (LRU Eviction)
+      if (_artworkMemoryCache.length > _maxCacheSize) {
+        _artworkMemoryCache.remove(_artworkMemoryCache.keys.first);
+      }
+
       return bytes;
     } catch (e) {
-      _artworkMemoryCache[id] = null;
+      // Don't cache errors excessively, but return null
       return null;
     }
+  }
+
+  Future<void> clearCache() async {
+    _artworkMemoryCache.clear();
+    if (_audioHandler is MyAudioHandler) {
+      await (_audioHandler as MyAudioHandler).clearArtworkCache();
+    }
+    notifyListeners();
   }
 
   Future<void> initSongs({bool forceRefresh = false}) async {
@@ -329,10 +357,7 @@ class AudioProvider extends ChangeNotifier {
     }
 
     if (forceRefresh) {
-      _artworkMemoryCache.clear();
-      if (_audioHandler is MyAudioHandler) {
-        await (_audioHandler as MyAudioHandler).clearArtworkCache();
-      }
+      await clearCache();
     }
 
     List<SongModel> fetchedSongs = await _audioQuery.querySongs(

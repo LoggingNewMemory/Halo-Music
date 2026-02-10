@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'l10n/app_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'main.dart'; // Import to access AudioProvider
 
 class SettingsUI extends StatelessWidget {
   const SettingsUI({super.key});
@@ -9,6 +11,7 @@ class SettingsUI extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
+    final provider = Provider.of<AudioProvider>(context, listen: false);
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -27,6 +30,21 @@ class SettingsUI extends StatelessWidget {
             title: l10n.about,
             subtitle: "Version 1.0.0",
           ),
+          const Divider(),
+          _buildSettingsTile(
+            context,
+            icon: FontAwesomeIcons.broom,
+            title: "Clear Cache",
+            subtitle: "Free up storage space",
+            onTap: () async {
+              await provider.clearCache();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Cache cleared successfully")),
+                );
+              }
+            },
+          ),
         ],
       ),
     );
@@ -37,10 +55,12 @@ class SettingsUI extends StatelessWidget {
     required IconData icon,
     required String title,
     String? subtitle,
+    VoidCallback? onTap,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return ListTile(
+      onTap: onTap,
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
