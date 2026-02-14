@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui';
+import 'dart:ui'; // Required for ImageFilter
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -14,16 +14,11 @@ class PlayerUI extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = Provider.of<AudioProvider>(context);
     final song = provider.currentSong;
-    final colorScheme = Theme.of(context).colorScheme;
 
     if (song == null) return const SizedBox.shrink();
 
-    // Use white for text on top of dark/blurred backgrounds for readability
-    const textColor = Colors.white;
-    const secondaryTextColor = Colors.white70;
-
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      extendBodyBehindAppBar: true, // Allows background to go behind AppBar
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -31,249 +26,220 @@ class PlayerUI extends StatelessWidget {
           icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined, color: Colors.white),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.star_border, color: Colors.white),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onPressed: () {},
+          ),
+        ],
       ),
       body: Stack(
-        fit: StackFit.expand,
         children: [
-          // 1. SOLID BASE COLOR
-          Container(color: colorScheme.surfaceContainer),
-
-          // 2. BACKGROUND IMAGE
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 600),
-            transitionBuilder: (Widget child, Animation<double> animation) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            child: Container(
-              key: ValueKey(song.id),
-              width: double.infinity,
-              height: double.infinity,
+          // --- LAYER 1: Blurred Background Image ---
+          Positioned.fill(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
               child: QueryArtworkWidget(
+                key: ValueKey(song.id),
                 id: song.id,
                 type: ArtworkType.AUDIO,
                 artworkFit: BoxFit.cover,
                 size: 500,
-                quality: 90,
+                quality: 100,
                 nullArtworkWidget: Container(
-                  color: colorScheme.primaryContainer,
-                  child: Center(
-                    child: Icon(
-                      Icons.music_note,
-                      size: 200,
-                      color: colorScheme.onPrimaryContainer.withOpacity(0.2),
-                    ),
-                  ),
+                  color: const Color(0xFF2C2238), // Fallback dark color
                 ),
               ),
             ),
           ),
 
-          // 3. BLUR EFFECT
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
-            child: Container(color: Colors.transparent),
+          // --- LAYER 2: Blur Effect & Dark Overlay ---
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 30.0, sigmaY: 30.0),
+              child: Container(
+                color: Colors.black.withOpacity(
+                  0.5,
+                ), // Darkens the background for readability
+              ),
+            ),
           ),
 
-          // 4. SYSTEM COLOR TINT OVERLAY
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  colorScheme.primary.withOpacity(0.2),
-                  Colors.black.withOpacity(0.8),
+          // --- LAYER 3: Main UI Content ---
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start, // Left align content
+                children: [
+                  const SizedBox(height: 20),
+
+                  // 1. Central Album Art (Clean & Sharp)
+                  Center(
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.4),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: QueryArtworkWidget(
+                            id: song.id,
+                            type: ArtworkType.AUDIO,
+                            artworkHeight: 500,
+                            artworkWidth: 500,
+                            size: 1000,
+                            quality: 100,
+                            keepOldArtwork: true,
+                            nullArtworkWidget: Container(
+                              color: Colors.white10,
+                              child: const Icon(
+                                Icons.music_note,
+                                size: 120,
+                                color: Colors.white24,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // 2. Song Info (Left Aligned)
+                  Text(
+                    song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    song.artist ?? "Unknown Artist",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+
+                  const Spacer(),
+
+                  // 3. Slider & Time
+                  _PlayerSlider(
+                    duration: Duration(milliseconds: song.duration ?? 0),
+                    audioHandler: provider.audioHandler,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // 4. Controls
+                  StreamBuilder<PlaybackState>(
+                    stream: provider.playbackStateStream,
+                    builder: (context, snapshot) {
+                      final playbackState = snapshot.data;
+                      final playing = playbackState?.playing ?? false;
+                      final shuffleMode =
+                          playbackState?.shuffleMode ??
+                          AudioServiceShuffleMode.none;
+                      final repeatMode =
+                          playbackState?.repeatMode ??
+                          AudioServiceRepeatMode.none;
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Shuffle
+                          IconButton(
+                            icon: Icon(
+                              Icons.shuffle,
+                              color: shuffleMode == AudioServiceShuffleMode.all
+                                  ? Theme.of(context).primaryColor
+                                  : Colors.white70,
+                              size: 28,
+                            ),
+                            onPressed: provider.toggleShuffle,
+                          ),
+
+                          // Previous
+                          IconButton(
+                            icon: const Icon(
+                              Icons.skip_previous,
+                              color: Colors.white,
+                              size: 36,
+                            ),
+                            onPressed: provider.playPrevious,
+                          ),
+
+                          // Play/Pause (White Circle)
+                          Container(
+                            height: 70,
+                            width: 70,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                            ),
+                            child: IconButton(
+                              iconSize: 32,
+                              padding: EdgeInsets.zero,
+                              icon: Icon(
+                                playing ? Icons.pause : Icons.play_arrow,
+                                color: Colors.black87,
+                              ),
+                              onPressed: provider.togglePlay,
+                            ),
+                          ),
+
+                          // Next
+                          IconButton(
+                            icon: const Icon(
+                              Icons.skip_next,
+                              color: Colors.white,
+                              size: 36,
+                            ),
+                            onPressed: provider.playNext,
+                          ),
+
+                          // Repeat
+                          IconButton(
+                            icon: Icon(
+                              repeatMode == AudioServiceRepeatMode.one
+                                  ? Icons.repeat_one
+                                  : Icons.repeat,
+                              color: repeatMode != AudioServiceRepeatMode.none
+                                  ? Theme.of(context).primaryColor
+                                  : Colors.white70,
+                              size: 28,
+                            ),
+                            onPressed: provider.toggleLoop,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 40),
                 ],
               ),
-            ),
-          ),
-
-          // 5. FOREGROUND CONTENT
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24.0,
-              vertical: 40.0,
-            ),
-            child: Column(
-              children: [
-                const SizedBox(height: 60),
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(32),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.4),
-                          blurRadius: 24,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(32),
-                      child: QueryArtworkWidget(
-                        id: song.id,
-                        type: ArtworkType.AUDIO,
-                        artworkHeight: 500,
-                        artworkWidth: 500,
-                        size: 1000,
-                        quality: 100,
-                        keepOldArtwork: true,
-                        nullArtworkWidget: Container(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Icons.music_note,
-                            size: 120,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 48),
-
-                // --- Song Title (Marquee) ---
-                SizedBox(
-                  height: 35,
-                  child: MarqueeWidget(
-                    child: Text(
-                      song.title,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            color: textColor,
-                            fontWeight: FontWeight.bold,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // --- Artist (Marquee) ---
-                SizedBox(
-                  height: 25,
-                  child: MarqueeWidget(
-                    child: Text(
-                      song.artist ?? "Unknown Artist",
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: secondaryTextColor,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // --- REAL HI-RES BADGE ---
-                _FormatBadge(song: song, colorScheme: colorScheme),
-
-                const Spacer(),
-
-                // --- Slider ---
-                _PlayerSlider(
-                  duration: Duration(milliseconds: song.duration ?? 0),
-                  audioHandler: provider.audioHandler,
-                  colorScheme: colorScheme,
-                ),
-
-                const SizedBox(height: 24),
-
-                // --- Controls ---
-                StreamBuilder<PlaybackState>(
-                  stream: provider.playbackStateStream,
-                  builder: (context, snapshot) {
-                    final playbackState = snapshot.data;
-                    final playing = playbackState?.playing ?? false;
-                    final shuffleMode =
-                        playbackState?.shuffleMode ??
-                        AudioServiceShuffleMode.none;
-                    final repeatMode =
-                        playbackState?.repeatMode ??
-                        AudioServiceRepeatMode.none;
-
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Shuffle Button
-                        IconButton(
-                          icon: Icon(
-                            Icons.shuffle,
-                            color: shuffleMode == AudioServiceShuffleMode.all
-                                ? colorScheme.primary
-                                : Colors.white60,
-                          ),
-                          onPressed: provider.toggleShuffle,
-                        ),
-
-                        IconButton(
-                          iconSize: 45,
-                          icon: const Icon(
-                            Icons.skip_previous_rounded,
-                            color: Colors.white,
-                          ),
-                          onPressed: provider.playPrevious,
-                        ),
-
-                        // Play/Pause
-                        Container(
-                          height: 72,
-                          width: 72,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: colorScheme.primaryContainer,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: IconButton(
-                            iconSize: 36,
-                            padding: EdgeInsets.zero,
-                            icon: Icon(
-                              playing
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: colorScheme.onPrimaryContainer,
-                            ),
-                            onPressed: provider.togglePlay,
-                          ),
-                        ),
-
-                        IconButton(
-                          iconSize: 45,
-                          icon: const Icon(
-                            Icons.skip_next_rounded,
-                            color: Colors.white,
-                          ),
-                          onPressed: provider.playNext,
-                        ),
-
-                        // Loop Button
-                        IconButton(
-                          icon: Icon(
-                            repeatMode == AudioServiceRepeatMode.one
-                                ? Icons.repeat_one_rounded
-                                : Icons.repeat_rounded,
-                            color: repeatMode != AudioServiceRepeatMode.none
-                                ? colorScheme.primary
-                                : Colors.white60,
-                          ),
-                          onPressed: provider.toggleLoop,
-                        ),
-                      ],
-                    );
-                  },
-                ),
-
-                const Spacer(),
-              ],
             ),
           ),
         ],
@@ -282,278 +248,11 @@ class PlayerUI extends StatelessWidget {
   }
 }
 
-// --- Custom Marquee Widget ---
-class MarqueeWidget extends StatefulWidget {
-  final Widget child;
-  final Duration pauseDuration;
-  final Duration animationDuration;
-
-  const MarqueeWidget({
-    super.key,
-    required this.child,
-    this.pauseDuration = const Duration(seconds: 2),
-    this.animationDuration = const Duration(seconds: 4),
-  });
-
-  @override
-  State<MarqueeWidget> createState() => _MarqueeWidgetState();
-}
-
-class _MarqueeWidgetState extends State<MarqueeWidget> {
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _animate());
-  }
-
-  void _animate() async {
-    if (!_scrollController.hasClients) return;
-
-    // Only animate if the text is wider than the screen
-    if (_scrollController.position.maxScrollExtent > 0) {
-      await Future.delayed(widget.pauseDuration);
-      if (_scrollController.hasClients) {
-        await _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: widget.animationDuration,
-          curve: Curves.linear,
-        );
-      }
-      await Future.delayed(widget.pauseDuration);
-      if (_scrollController.hasClients) {
-        // Jump back to start
-        _scrollController.jumpTo(0.0);
-        _animate();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      controller: _scrollController,
-      scrollDirection: Axis.horizontal,
-      physics: const NeverScrollableScrollPhysics(),
-      child: widget.child,
-    );
-  }
-}
-
-// --- UPDATED WIDGET: Real File Header Parsing for Accurate Hi-Res ---
-class _FormatBadge extends StatefulWidget {
-  final SongModel song;
-  final ColorScheme colorScheme;
-
-  const _FormatBadge({required this.song, required this.colorScheme});
-
-  @override
-  State<_FormatBadge> createState() => _FormatBadgeState();
-}
-
-class _FormatBadgeState extends State<_FormatBadge> {
-  String _sampleRate = "44.1kHz";
-  String _bitDepth = "16bit";
-  bool _isHiRes = false;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadRealMetadata();
-  }
-
-  @override
-  void didUpdateWidget(covariant _FormatBadge oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.song.id != widget.song.id) {
-      _loadRealMetadata();
-    }
-  }
-
-  Future<void> _loadRealMetadata() async {
-    final path = widget.song.data;
-    final extension = widget.song.displayName
-        .split('.')
-        .last
-        .toUpperCase()
-        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
-
-    // Default values
-    int rate = 44100;
-    int bits = 16;
-
-    try {
-      final file = File(path);
-      if (await file.exists()) {
-        if (extension == 'FLAC') {
-          final data = await _parseFlacHeader(file);
-          if (data != null) {
-            rate = data['rate']!;
-            bits = data['bits']!;
-          }
-        } else if (extension == 'WAV') {
-          final data = await _parseWavHeader(file);
-          if (data != null) {
-            rate = data['rate']!;
-            bits = data['bits']!;
-          }
-        } else {
-          rate = 44100;
-          bits = 16;
-        }
-      }
-    } catch (e) {
-      debugPrint("Error reading metadata: $e");
-    }
-
-    final isHiRes = (rate > 48000) || (bits > 16);
-
-    String rateStr = (rate >= 1000)
-        ? "${(rate / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}kHz"
-        : "${rate}Hz";
-
-    if (mounted) {
-      setState(() {
-        _sampleRate = rateStr;
-        _bitDepth = "${bits}bit";
-        _isHiRes = isHiRes;
-        _isLoading = false;
-      });
-    }
-  }
-
-  // Pure Dart FLAC Header Parser
-  Future<Map<String, int>?> _parseFlacHeader(File file) async {
-    try {
-      final raf = await file.open(mode: FileMode.read);
-      final bytes = await raf.read(42);
-      await raf.close();
-
-      if (bytes[0] != 0x66 ||
-          bytes[1] != 0x4C ||
-          bytes[2] != 0x61 ||
-          bytes[3] != 0x43) {
-        return null;
-      }
-
-      final b0 = bytes[18];
-      final b1 = bytes[19];
-      final b2 = bytes[20];
-      final b3 = bytes[21];
-
-      final sampleRate = (b0 << 12) | (b1 << 4) | ((b2 & 0xF0) >> 4);
-      final bps = ((b2 & 0x01) << 4) | ((b3 & 0xF0) >> 4) + 1;
-
-      return {'rate': sampleRate, 'bits': bps};
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Pure Dart WAV Header Parser
-  Future<Map<String, int>?> _parseWavHeader(File file) async {
-    try {
-      final raf = await file.open(mode: FileMode.read);
-      final bytes = await raf.read(44);
-      await raf.close();
-
-      if (bytes[0] != 0x52 || bytes[1] != 0x49) return null;
-
-      final sampleRate =
-          bytes[24] | (bytes[25] << 8) | (bytes[26] << 16) | (bytes[27] << 24);
-
-      final bitsPerSample = bytes[34] | (bytes[35] << 8);
-
-      return {'rate': sampleRate, 'bits': bitsPerSample};
-    } catch (e) {
-      return null;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final extension = widget.song.displayName
-        .split('.')
-        .last
-        .toUpperCase()
-        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
-
-    final int bitrate =
-        (widget.song.duration != null && widget.song.duration! > 0)
-        ? ((widget.song.size * 8) / widget.song.duration!).round()
-        : 0;
-
-    final textStyle = TextStyle(
-      color: _isHiRes ? widget.colorScheme.primary : Colors.white70,
-      fontWeight: _isHiRes ? FontWeight.bold : FontWeight.w500,
-      fontSize: 12,
-      letterSpacing: 0.5,
-    );
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: _isHiRes
-            ? widget.colorScheme.primary.withOpacity(0.2)
-            : Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: _isHiRes
-            ? Border.all(
-                color: widget.colorScheme.primary.withOpacity(0.5),
-                width: 1,
-              )
-            : null,
-        boxShadow: _isHiRes
-            ? [
-                BoxShadow(
-                  color: widget.colorScheme.primary.withOpacity(0.1),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ]
-            : [],
-      ),
-      child: AnimatedOpacity(
-        opacity: _isLoading ? 0.0 : 1.0,
-        duration: const Duration(milliseconds: 300),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _isHiRes ? Icons.bolt_rounded : Icons.music_note_rounded,
-              size: 16,
-              color: _isHiRes ? widget.colorScheme.primary : Colors.white70,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              "$extension • $_sampleRate • $_bitDepth • ${bitrate}kbps",
-              style: textStyle,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _PlayerSlider extends StatefulWidget {
   final Duration duration;
   final AudioHandler audioHandler;
-  final ColorScheme colorScheme;
 
-  const _PlayerSlider({
-    required this.duration,
-    required this.audioHandler,
-    required this.colorScheme,
-  });
+  const _PlayerSlider({required this.duration, required this.audioHandler});
 
   @override
   State<_PlayerSlider> createState() => _PlayerSliderState();
@@ -582,14 +281,15 @@ class _PlayerSliderState extends State<_PlayerSlider> {
           children: [
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
-                activeTrackColor: widget.colorScheme.primary,
+                activeTrackColor: Colors.white,
                 inactiveTrackColor: Colors.white24,
                 thumbColor: Colors.white,
-                trackHeight: 4.0,
-                overlayColor: widget.colorScheme.primary.withOpacity(0.2),
+                trackHeight: 2.0,
                 thumbShape: const RoundSliderThumbShape(
                   enabledThumbRadius: 6.0,
                 ),
+                overlayColor: Colors.white.withOpacity(0.2),
+                trackShape: const RectangularSliderTrackShape(),
               ),
               child: Slider(
                 min: 0.0,
@@ -613,7 +313,7 @@ class _PlayerSliderState extends State<_PlayerSlider> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -640,7 +340,8 @@ class _PlayerSliderState extends State<_PlayerSlider> {
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return "${duration.inMinutes}:$seconds";
+    return "$minutes:$seconds";
   }
 }
