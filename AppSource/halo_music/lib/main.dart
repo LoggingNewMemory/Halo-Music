@@ -13,6 +13,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:rxdart/rxdart.dart'; // REQUIRED: Imports Rx.combineLatest
 
 import 'music_list.dart';
 
@@ -125,7 +126,14 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final _audioQuery = OnAudioQuery();
 
   MyAudioHandler() {
-    _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
+    // FIX: Use Rx.combineLatest3 to merge Playback events, Shuffle events, and Loop events.
+    // This ensures that if ANY of these change, the UI updates immediately.
+    Rx.combineLatest3<PlaybackEvent, bool, LoopMode, PlaybackState>(
+      _player.playbackEventStream,
+      _player.shuffleModeEnabledStream,
+      _player.loopModeStream,
+      (event, shuffleEnabled, loopMode) => _transformEvent(event),
+    ).pipe(playbackState);
 
     _player.currentIndexStream.listen((index) {
       if (index != null && queue.value.isNotEmpty) {
@@ -267,6 +275,7 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         await _player.setLoopMode(LoopMode.all);
         break;
     }
+    // No manual add needed here, the rx stream handles it automatically
   }
 
   @override
@@ -275,8 +284,9 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       await _player.setShuffleModeEnabled(false);
     } else {
       await _player.setShuffleModeEnabled(true);
-      await _player.shuffle(); // Trigger shuffle immediately
+      await _player.shuffle();
     }
+    // No manual add needed here, the rx stream handles it automatically
   }
 
   Future<void> setPlaylist(List<MediaItem> songs) async {
@@ -287,7 +297,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         )
         .toList();
 
-    // Define the sequence
     final playlist = ConcatenatingAudioSource(children: audioSources);
     await _player.setAudioSource(playlist);
   }
@@ -355,7 +364,6 @@ class AudioProvider extends ChangeNotifier {
       if (await file.exists()) {
         final String content = await file.readAsString();
         final Map<String, dynamic> json = jsonDecode(content);
-        // Convert dynamic list to int list
         _playlists = json.map(
           (key, value) => MapEntry(key, List<int>.from(value)),
         );
@@ -618,11 +626,6 @@ class AudioProvider extends ChangeNotifier {
 
   Future<void> playSong(int index) async {
     final songToPlay = _displayedSongs[index];
-    // Find index in global list because queue usually matches global list (or shuffled version)
-    // If user is searching, we might need to reset playlist to displayed songs?
-    // For simplicity, we assume queue matches _allSongs initially.
-
-    // Better Approach: Reset queue to displayed songs and play
     final mediaItems = _displayedSongs.map((song) {
       return MediaItem(
         id: song.id.toString(),
@@ -636,7 +639,6 @@ class AudioProvider extends ChangeNotifier {
     }).toList();
 
     if (_audioHandler is MyAudioHandler) {
-      // Note: This resets the queue on every tap, which allows playing from search results correctly
       await (_audioHandler as MyAudioHandler).setPlaylist(mediaItems);
       await _audioHandler.skipToQueueItem(index);
       await _audioHandler.play();
@@ -659,7 +661,6 @@ class AudioProvider extends ChangeNotifier {
   void playNext() => _audioHandler.skipToNext();
   void playPrevious() => _audioHandler.skipToPrevious();
 
-  // New controls
   void toggleShuffle() {
     final mode = _audioHandler.playbackState.value.shuffleMode;
     if (mode == AudioServiceShuffleMode.all) {
