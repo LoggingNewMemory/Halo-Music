@@ -90,6 +90,18 @@ class _PlayerUIState extends State<PlayerUI> {
           Container(color: colorScheme.surfaceContainer),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 600),
+            // Stack the new background on top of the old one to prevent transparent flickering
+            layoutBuilder:
+                (Widget? currentChild, List<Widget> previousChildren) {
+                  return Stack(
+                    fit: StackFit.expand,
+                    alignment: Alignment.center,
+                    children: <Widget>[
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  );
+                },
             transitionBuilder: (Widget child, Animation<double> animation) {
               return FadeTransition(opacity: animation, child: child);
             },
@@ -107,6 +119,8 @@ class _PlayerUIState extends State<PlayerUI> {
                     artworkFit: BoxFit.cover,
                     size: 400,
                     quality: 100,
+                    keepOldArtwork:
+                        true, // Added to prevent null artwork flashes
                     nullArtworkWidget: Container(color: Colors.transparent),
                   ),
                 ),
@@ -256,6 +270,20 @@ class _PlayerUIState extends State<PlayerUI> {
                       const SizedBox(height: 16),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
+                        // Also apply layoutBuilder to text to stop vertical jumping during switch
+                        layoutBuilder:
+                            (
+                              Widget? currentChild,
+                              List<Widget> previousChildren,
+                            ) {
+                              return Stack(
+                                alignment: Alignment.centerLeft,
+                                children: <Widget>[
+                                  ...previousChildren,
+                                  if (currentChild != null) currentChild,
+                                ],
+                              );
+                            },
                         child: Align(
                           key: ValueKey('info_${song.id}'),
                           alignment: Alignment.centerLeft,
