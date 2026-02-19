@@ -30,7 +30,7 @@ class _PlayerUIState extends State<PlayerUI> {
         // Added vertical margin to give the shadow room to render without overlapping
         margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(32),
+          borderRadius: BorderRadius.circular(3),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.4),
@@ -40,7 +40,7 @@ class _PlayerUIState extends State<PlayerUI> {
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(32),
+          borderRadius: BorderRadius.circular(3),
           child: QueryArtworkWidget(
             id: songId,
             type: ArtworkType.AUDIO,
@@ -49,6 +49,7 @@ class _PlayerUIState extends State<PlayerUI> {
             size: 1000,
             quality: 100,
             keepOldArtwork: true,
+            artworkBorder: BorderRadius.circular(20),
             nullArtworkWidget: Container(
               color: colorScheme.surfaceContainerHighest,
               child: Icon(
