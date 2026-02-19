@@ -49,7 +49,7 @@ class _PlayerUIState extends State<PlayerUI> {
             size: 1000,
             quality: 100,
             keepOldArtwork: true,
-            artworkBorder: BorderRadius.circular(20),
+            artworkBorder: BorderRadius.circular(10),
             nullArtworkWidget: Container(
               color: colorScheme.surfaceContainerHighest,
               child: Icon(
@@ -102,19 +102,18 @@ class _PlayerUIState extends State<PlayerUI> {
               key: ValueKey(song.id),
               width: double.infinity,
               height: double.infinity,
-              child: QueryArtworkWidget(
-                id: song.id,
-                type: ArtworkType.AUDIO,
-                artworkFit: BoxFit.cover,
-                size: 500,
-                quality: 90,
-                nullArtworkWidget: Container(
-                  color: colorScheme.primaryContainer,
-                  child: Center(
-                    child: Icon(
-                      Icons.music_note,
-                      size: 200,
-                      color: colorScheme.onPrimaryContainer.withOpacity(0.2),
+              child: Transform.scale(
+                scale: 1.2,
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+                  child: QueryArtworkWidget(
+                    id: song.id,
+                    type: ArtworkType.AUDIO,
+                    artworkFit: BoxFit.cover,
+                    size: 100,
+                    quality: 50,
+                    nullArtworkWidget: Container(
+                      color: colorScheme.primaryContainer,
                     ),
                   ),
                 ),
