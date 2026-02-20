@@ -51,12 +51,12 @@ class _MusicListScreenState extends State<MusicListScreen> {
             children: [
               TextSpan(
                 text: 'H',
-                style: TextStyle(color: Colors.blue),
+                style: TextStyle(color: Colors.red),
               ),
               TextSpan(text: 'alo '),
               TextSpan(
                 text: 'M',
-                style: TextStyle(color: Colors.red),
+                style: TextStyle(color: Colors.blue),
               ),
               TextSpan(text: 'usic'),
             ],
