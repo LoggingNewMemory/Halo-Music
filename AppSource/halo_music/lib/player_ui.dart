@@ -5,6 +5,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import 'package:headphones_detection/headphones_detection.dart';
 import 'main.dart';
 import 'song_cover.dart';
 import 'cube_effect.dart';
@@ -233,10 +234,17 @@ class _PlayerUIState extends State<PlayerUI> {
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: Center(
-                          key: ValueKey('badge_${song.id}'),
-                          child: _FormatBadge(
-                            song: song,
-                            colorScheme: colorScheme,
+                          key: ValueKey('badge_row_${song.id}'),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _OutputIndicator(colorScheme: colorScheme),
+                              const SizedBox(width: 8),
+                              _FormatBadge(
+                                song: song,
+                                colorScheme: colorScheme,
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -461,6 +469,72 @@ class _MarqueeWidgetState extends State<MarqueeWidget> {
       scrollDirection: Axis.horizontal,
       physics: const NeverScrollableScrollPhysics(),
       child: widget.child,
+    );
+  }
+}
+
+class _OutputIndicator extends StatefulWidget {
+  final ColorScheme colorScheme;
+
+  const _OutputIndicator({required this.colorScheme});
+
+  @override
+  State<_OutputIndicator> createState() => _OutputIndicatorState();
+}
+
+class _OutputIndicatorState extends State<_OutputIndicator> {
+  bool _isHeadphone = false;
+  StreamSubscription<bool>? _subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAudioRoute();
+  }
+
+  Future<void> _initAudioRoute() async {
+    try {
+      final isConnected = await HeadphonesDetection.isHeadphonesConnected();
+      if (mounted) {
+        setState(() => _isHeadphone = isConnected);
+      }
+
+      _subscription = HeadphonesDetection.headphonesStream.listen((connected) {
+        if (mounted) {
+          setState(() => _isHeadphone = connected);
+        }
+      });
+    } catch (e) {
+      debugPrint("Error detecting audio output: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          return ScaleTransition(scale: animation, child: child);
+        },
+        child: Icon(
+          _isHeadphone ? Icons.headphones_rounded : Icons.speaker_rounded,
+          key: ValueKey<bool>(_isHeadphone),
+          size: 16,
+          color: Colors.white70,
+        ),
+      ),
     );
   }
 }
