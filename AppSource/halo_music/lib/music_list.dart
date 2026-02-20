@@ -313,9 +313,30 @@ class _MusicListScreenState extends State<MusicListScreen> {
 
     return GestureDetector(
       onTap: () {
+        // Updated to use a vertical slide transition
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const PlayerUI()),
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const PlayerUI(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  const begin = Offset(0.0, 1.0); // Start from bottom
+                  const end = Offset.zero; // End at top (normal position)
+                  const curve = Curves.easeOutCubic;
+
+                  var tween = Tween(
+                    begin: begin,
+                    end: end,
+                  ).chain(CurveTween(curve: curve));
+                  var offsetAnimation = animation.drive(tween);
+
+                  return SlideTransition(
+                    position: offsetAnimation,
+                    child: child,
+                  );
+                },
+          ),
         );
       },
       child: Container(
