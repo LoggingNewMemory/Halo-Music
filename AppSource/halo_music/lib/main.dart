@@ -668,7 +668,6 @@ class AudioProvider extends ChangeNotifier {
     } else {
       _audioHandler.setShuffleMode(AudioServiceShuffleMode.all);
     }
-    notifyListeners();
   }
 
   void toggleLoop() {
@@ -685,6 +684,5 @@ class AudioProvider extends ChangeNotifier {
         _audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
         break;
     }
-    notifyListeners();
   }
 }
