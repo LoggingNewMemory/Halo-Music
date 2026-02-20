@@ -140,10 +140,6 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         }
       }
     });
-
-    _player.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) skipToNext();
-    });
   }
 
   PlaybackState _transformEvent(PlaybackEvent event) {

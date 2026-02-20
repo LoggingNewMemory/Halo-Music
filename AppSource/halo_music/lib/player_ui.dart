@@ -179,7 +179,6 @@ class _PlayerUIState extends State<PlayerUI> {
 
     if (song == null) return const SizedBox.shrink();
 
-    // Trigger color extraction if the song changes
     if (song.id != _lastProcessedSongId) {
       _lastProcessedSongId = song.id;
       _extractDominantColor(song.id, colorScheme.primary);
@@ -192,7 +191,6 @@ class _PlayerUIState extends State<PlayerUI> {
 
     return GestureDetector(
       onVerticalDragEnd: (details) {
-        // Detect swipe down to pop
         if (details.primaryVelocity != null && details.primaryVelocity! > 300) {
           Navigator.pop(context);
         }
@@ -239,12 +237,11 @@ class _PlayerUIState extends State<PlayerUI> {
               ),
             ),
 
-            // BARS VISUALIZER
             BarsVisualizer(
               color: activeVisualizerColor,
               playbackStream: provider.playbackStateStream,
             ),
-            // Gradient overlay for text readability
+
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -264,7 +261,6 @@ class _PlayerUIState extends State<PlayerUI> {
               children: [
                 const SizedBox(height: 100),
 
-                // Album Art Carousel
                 SizedBox(
                   height: MediaQuery.of(context).size.width * 0.9,
                   child: StreamBuilder<List<MediaItem>>(
@@ -300,11 +296,15 @@ class _PlayerUIState extends State<PlayerUI> {
                         if (currentPage != currentIndex && !isScrolling) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             if (_pageController?.hasClients ?? false) {
-                              _pageController!.animateToPage(
-                                currentIndex,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut,
-                              );
+                              if ((currentPage - currentIndex).abs() > 1) {
+                                _pageController!.jumpToPage(currentIndex);
+                              } else {
+                                _pageController!.animateToPage(
+                                  currentIndex,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOut,
+                                );
+                              }
                             }
                           });
                         }
@@ -316,10 +316,10 @@ class _PlayerUIState extends State<PlayerUI> {
                         physics: const BouncingScrollPhysics(),
                         itemCount: queue.length,
                         onPageChanged: (index) {
+                          if (_debounce?.isActive ?? false) {
+                            _debounce!.cancel();
+                          }
                           if (index != currentIndex) {
-                            if (_debounce?.isActive ?? false) {
-                              _debounce!.cancel();
-                            }
                             _debounce = Timer(
                               const Duration(milliseconds: 300),
                               () {
