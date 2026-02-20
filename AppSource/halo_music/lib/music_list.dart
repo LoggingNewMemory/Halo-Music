@@ -46,7 +46,22 @@ class _MusicListScreenState extends State<MusicListScreen> {
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: Text(l10n.appTitle),
+        title: const Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: 'H',
+                style: TextStyle(color: Colors.blue),
+              ),
+              TextSpan(text: 'alo '),
+              TextSpan(
+                text: 'M',
+                style: TextStyle(color: Colors.red),
+              ),
+              TextSpan(text: 'usic'),
+            ],
+          ),
+        ),
         centerTitle: false,
         actions: [
           // Sleep Timer Button
