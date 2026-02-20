@@ -372,6 +372,7 @@ class PlaylistDetailScreen extends StatelessWidget {
 
   void _showAddSongsBottomSheet(BuildContext context, AudioProvider provider) {
     final allSongs = provider.songs;
+    final colorScheme = Theme.of(context).colorScheme;
 
     showModalBottomSheet(
       context: context,
@@ -414,9 +415,34 @@ class PlaylistDetailScreen extends StatelessWidget {
                             final isAdded = existingSongs.contains(song.id);
 
                             return ListTile(
-                              leading: Icon(
-                                Icons.music_note,
-                                color: Theme.of(context).colorScheme.primary,
+                              leading: SizedBox(
+                                width: 50,
+                                height: 50,
+                                child: ClipOval(
+                                  child: FutureBuilder<Uint8List?>(
+                                    future: currentProvider.getArtworkBytes(
+                                      song.id,
+                                    ),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.hasData &&
+                                          snapshot.data != null) {
+                                        return Image.memory(
+                                          snapshot.data!,
+                                          fit: BoxFit.cover,
+                                          gaplessPlayback: true,
+                                        );
+                                      }
+                                      return Container(
+                                        color:
+                                            colorScheme.surfaceContainerHighest,
+                                        child: Icon(
+                                          Icons.music_note,
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
                               ),
                               title: Text(
                                 song.title,
