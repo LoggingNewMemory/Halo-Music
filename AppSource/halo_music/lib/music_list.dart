@@ -9,7 +9,7 @@ import 'l10n/app_localizations.dart';
 import 'main.dart';
 import 'player_ui.dart';
 import 'settings_ui.dart';
-import 'playlist_screen.dart'; // Import the new file
+import 'playlist_screen.dart';
 
 class MusicListScreen extends StatefulWidget {
   const MusicListScreen({super.key});
@@ -64,7 +64,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
         ),
         centerTitle: false,
         actions: [
-          // Sleep Timer Button
           IconButton(
             icon: Icon(
               provider.isSleepTimerActive ? Icons.timer : Icons.timer_outlined,
@@ -309,7 +308,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         decoration: BoxDecoration(
           color: colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(36), // Fully rounded
+          borderRadius: BorderRadius.circular(36),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -462,7 +461,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
             onTap: () => _showSortBottomSheet(context, provider),
           ),
           const SizedBox(width: 8),
-          // Playlist Button
           _topButton(
             context,
             FontAwesomeIcons.list,
@@ -642,7 +640,6 @@ class _MusicListScreenState extends State<MusicListScreen> {
   }
 }
 
-// --- CACHED TILE WIDGET ---
 class _CachedSongTile extends StatelessWidget {
   final SongModel song;
   final VoidCallback onTap;
