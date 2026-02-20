@@ -209,41 +209,56 @@ class _MusicListScreenState extends State<MusicListScreen> {
   ) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
         final playlists = provider.playlists.keys.toList();
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                "Add to Playlist",
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.add),
-                title: const Text("New Playlist"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCreatePlaylistDialog(context, provider, songId: song.id);
-                },
-              ),
-              const Divider(),
-              ...playlists.map(
-                (name) => ListTile(
-                  leading: const Icon(Icons.playlist_play),
-                  title: Text(name),
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "Add to Playlist",
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.add),
+                  title: const Text("New Playlist"),
                   onTap: () {
-                    provider.addToPlaylist(name, song.id);
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(
+                    _showCreatePlaylistDialog(
                       context,
-                    ).showSnackBar(SnackBar(content: Text("Added to $name")));
+                      provider,
+                      songId: song.id,
+                    );
                   },
                 ),
-              ),
-            ],
+                const Divider(),
+                if (playlists.isNotEmpty)
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: playlists.length,
+                      itemBuilder: (context, index) {
+                        final name = playlists[index];
+                        return ListTile(
+                          leading: const Icon(Icons.playlist_play),
+                          title: Text(name),
+                          onTap: () {
+                            provider.addToPlaylist(name, song.id);
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("Added to $name")),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       },
