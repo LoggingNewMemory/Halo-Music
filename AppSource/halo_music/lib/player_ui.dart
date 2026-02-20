@@ -6,9 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:headphones_detection/headphones_detection.dart';
+
 import 'main.dart';
 import 'song_cover.dart';
+import 'visualizers/visualizer_settings.dart';
 import 'visualizers/cube_effect.dart';
+import 'visualizers/bars_effect.dart';
+import 'visualizers/wave_effect.dart';
 
 class PlayerUI extends StatefulWidget {
   const PlayerUI({super.key});
@@ -54,7 +58,7 @@ class _PlayerUIState extends State<PlayerUI> {
         children: [
           Container(color: Colors.black),
 
-          // The Blur is back!
+          // Background Blur Image
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 600),
             child: SizedBox(
@@ -81,10 +85,22 @@ class _PlayerUIState extends State<PlayerUI> {
             ),
           ),
 
-          CubeEqualizer(
-            colorScheme: colorScheme,
-            playbackStream: provider.playbackStateStream,
+          // DYNAMIC VISUALIZER LISTENER
+          ValueListenableBuilder<String>(
+            valueListenable: VisualizerSettings.instance,
+            builder: (context, visualizerType, child) {
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                child: _buildActiveVisualizer(
+                  visualizerType,
+                  colorScheme,
+                  provider.playbackStateStream,
+                ),
+              );
+            },
           ),
+
+          // Gradient overlay for text readability
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -99,9 +115,12 @@ class _PlayerUIState extends State<PlayerUI> {
               ),
             ),
           ),
+
           Column(
             children: [
               const SizedBox(height: 100),
+
+              // Album Art Carousel
               SizedBox(
                 height: MediaQuery.of(context).size.width * 0.9,
                 child: StreamBuilder<List<MediaItem>>(
@@ -222,6 +241,7 @@ class _PlayerUIState extends State<PlayerUI> {
                 ),
               ),
               const SizedBox(height: 16),
+
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.only(
@@ -409,7 +429,41 @@ class _PlayerUIState extends State<PlayerUI> {
       ),
     );
   }
+
+  Widget _buildActiveVisualizer(
+    String type,
+    ColorScheme colorScheme,
+    Stream<PlaybackState> stream,
+  ) {
+    switch (type) {
+      case 'cube':
+        return CubeEqualizer(
+          key: const ValueKey('cube'),
+          colorScheme: colorScheme,
+          playbackStream: stream,
+        );
+      case 'bars':
+        return BarsVisualizer(
+          key: const ValueKey('bars'),
+          colorScheme: colorScheme,
+          playbackStream: stream,
+        );
+      case 'wave':
+        return WaveVisualizer(
+          key: const ValueKey('wave'),
+          colorScheme: colorScheme,
+          playbackStream: stream,
+        );
+      case 'none':
+      default:
+        return const SizedBox.shrink(key: ValueKey('none'));
+    }
+  }
 }
+
+// ============================================================================
+// Helper Widgets below (Untouched from original)
+// ============================================================================
 
 class MarqueeWidget extends StatefulWidget {
   final Widget child;

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'l10n/app_localizations.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'main.dart'; // Import to access AudioProvider
+import 'main.dart';
+import 'visualizers/visualizer_settings.dart'; // Import the new settings
 
 class SettingsUI extends StatelessWidget {
   const SettingsUI({super.key});
@@ -24,6 +25,21 @@ class SettingsUI extends StatelessWidget {
             title: l10n.theme,
             subtitle: "System default",
           ),
+
+          // DYNAMIC VISUALIZER SELECTOR
+          ValueListenableBuilder<String>(
+            valueListenable: VisualizerSettings.instance,
+            builder: (context, currentVisualizer, child) {
+              return _buildSettingsTile(
+                context,
+                icon: FontAwesomeIcons.waveSquare,
+                title: "Visualizer Effect",
+                subtitle: _getVisualizerName(currentVisualizer),
+                onTap: () => _showVisualizerPicker(context, currentVisualizer),
+              );
+            },
+          ),
+
           _buildSettingsTile(
             context,
             icon: FontAwesomeIcons.circleInfo,
@@ -47,6 +63,83 @@ class SettingsUI extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  String _getVisualizerName(String key) {
+    switch (key) {
+      case 'cube':
+        return "Holographic Cubes";
+      case 'bars':
+        return "Classic Bars";
+      case 'wave':
+        return "Circular Wave";
+      case 'none':
+        return "Disabled";
+      default:
+        return "Unknown";
+    }
+  }
+
+  void _showVisualizerPicker(BuildContext context, String currentVal) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  "Select Visualizer",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              _visualizerOption(context, 'wave', "Circular Wave", currentVal),
+              _visualizerOption(context, 'bars', "Classic Bars", currentVal),
+              _visualizerOption(
+                context,
+                'cube',
+                "Holographic Cubes",
+                currentVal,
+              ),
+              _visualizerOption(context, 'none', "Disabled", currentVal),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _visualizerOption(
+    BuildContext context,
+    String value,
+    String title,
+    String currentVal,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isSelected = value == currentVal;
+
+    return ListTile(
+      leading: Icon(
+        isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+        color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      onTap: () {
+        VisualizerSettings.instance.setVisualizer(value);
+        Navigator.pop(context);
+      },
     );
   }
 

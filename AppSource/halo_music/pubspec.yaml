@@ -26,6 +26,7 @@ dependencies:
   path_provider: ^2.1.2
   dynamic_color: ^1.8.1
   headphones_detection: ^1.1.2
+  shared_preferences: ^2.5.4
 
 dev_dependencies:
   flutter_test:
