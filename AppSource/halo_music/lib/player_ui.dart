@@ -8,7 +8,7 @@ import 'package:on_audio_query/on_audio_query.dart';
 import 'package:headphones_detection/headphones_detection.dart';
 import 'main.dart';
 import 'song_cover.dart';
-import 'cube_effect.dart';
+import 'visualizers/cube_effect.dart';
 
 class PlayerUI extends StatefulWidget {
   const PlayerUI({super.key});
