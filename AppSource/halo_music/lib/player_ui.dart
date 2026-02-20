@@ -30,8 +30,8 @@ class _PlayerUIState extends State<PlayerUI> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<AudioProvider>(context);
-    final song = provider.currentSong;
+    final provider = Provider.of<AudioProvider>(context, listen: false);
+    final song = context.select((AudioProvider p) => p.currentSong);
     final colorScheme = Theme.of(context).colorScheme;
 
     if (song == null) return const SizedBox.shrink();
