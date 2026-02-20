@@ -65,6 +65,97 @@ class _PlayerUIState extends State<PlayerUI> {
     }
   }
 
+  void _showAddToPlaylistDialog(
+    BuildContext context,
+    AudioProvider provider,
+    SongModel song,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        final playlists = provider.playlists.keys.toList();
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "Add to Playlist",
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text("New Playlist"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreatePlaylistDialog(context, provider, songId: song.id);
+                },
+              ),
+              const Divider(),
+              ...playlists.map(
+                (name) => ListTile(
+                  leading: const Icon(Icons.playlist_play),
+                  title: Text(name),
+                  onTap: () {
+                    provider.addToPlaylist(name, song.id);
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text("Added to $name")));
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showCreatePlaylistDialog(
+    BuildContext context,
+    AudioProvider provider, {
+    int? songId,
+  }) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("New Playlist"),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(hintText: "Playlist Name"),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                if (controller.text.isNotEmpty) {
+                  provider.createPlaylist(controller.text);
+                  if (songId != null) {
+                    provider.addToPlaylist(controller.text, songId);
+                  }
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text("Create"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AudioProvider>(context, listen: false);
@@ -286,14 +377,23 @@ class _PlayerUIState extends State<PlayerUI> {
                         duration: const Duration(milliseconds: 300),
                         child: Center(
                           key: ValueKey('badge_row_${song.id}'),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                          child: Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8.0,
+                            runSpacing: 8.0,
                             children: [
                               _OutputIndicator(colorScheme: colorScheme),
-                              const SizedBox(width: 8),
                               _FormatBadge(
                                 song: song,
                                 colorScheme: colorScheme,
+                              ),
+                              _PlaylistButton(
+                                onTap: () => _showAddToPlaylistDialog(
+                                  context,
+                                  provider,
+                                  song,
+                                ),
                               ),
                             ],
                           ),
@@ -465,6 +565,31 @@ class _PlayerUIState extends State<PlayerUI> {
 // ============================================================================
 // Helper Widgets below
 // ============================================================================
+
+class _PlaylistButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _PlaylistButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Icon(
+          Icons.playlist_add_rounded,
+          size: 16,
+          color: Colors.white70,
+        ),
+      ),
+    );
+  }
+}
 
 class MarqueeWidget extends StatefulWidget {
   final Widget child;
