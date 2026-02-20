@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:on_audio_query/on_audio_query.dart';
-import 'main.dart'; // To access AudioProvider and SongModel
-import 'player_ui.dart'; // To navigate to player
+import 'main.dart';
 
 class PlaylistScreen extends StatelessWidget {
   const PlaylistScreen({super.key});
@@ -95,10 +94,10 @@ class PlaylistScreen extends StatelessWidget {
                           icon: const Icon(Icons.play_arrow_rounded),
                           onPressed: () {
                             provider.playPlaylist(playlistName);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const PlayerUI(),
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("Playing $playlistName"),
+                                duration: const Duration(seconds: 1),
                               ),
                             );
                           },
@@ -269,9 +268,11 @@ class PlaylistDetailScreen extends StatelessWidget {
             onPressed: () {
               if (songs.isNotEmpty) {
                 provider.playPlaylist(playlistName);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PlayerUI()),
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("Playing $playlistName"),
+                    duration: const Duration(seconds: 1),
+                  ),
                 );
               }
             },
@@ -347,9 +348,11 @@ class PlaylistDetailScreen extends StatelessWidget {
                     subtitle: Text(song.artist ?? "Unknown"),
                     onTap: () {
                       provider.playPlaylist(playlistName);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const PlayerUI()),
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Playing $playlistName"),
+                          duration: const Duration(seconds: 1),
+                        ),
                       );
                     },
                     trailing: IconButton(

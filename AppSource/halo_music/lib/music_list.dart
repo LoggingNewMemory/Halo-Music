@@ -18,13 +18,31 @@ class MusicListScreen extends StatefulWidget {
   State<MusicListScreen> createState() => _MusicListScreenState();
 }
 
-class _MusicListScreenState extends State<MusicListScreen> {
+class _MusicListScreenState extends State<MusicListScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
+
+  late AnimationController _playerSlideController;
 
   @override
   void initState() {
     super.initState();
+
+    // Controller for the PlayerUI sliding animation
+    _playerSlideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+
+    // Listen to changes to handle hardware back button smoothly
+    _playerSlideController.addStatusListener((status) {
+      if (status == AnimationStatus.completed ||
+          status == AnimationStatus.dismissed) {
+        setState(() {});
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<AudioProvider>(context, listen: false).initSongs();
     });
@@ -33,6 +51,7 @@ class _MusicListScreenState extends State<MusicListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _playerSlideController.dispose();
     super.dispose();
   }
 
@@ -43,91 +62,146 @@ class _MusicListScreenState extends State<MusicListScreen> {
     final currentSong = provider.currentSong;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      appBar: AppBar(
-        title: const Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: 'H',
-                style: TextStyle(color: Colors.red),
-              ),
-              TextSpan(text: 'alo '),
-              TextSpan(
-                text: 'M',
-                style: TextStyle(color: Colors.blue),
-              ),
-              TextSpan(text: 'usic'),
-            ],
-          ),
-        ),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            icon: Icon(
-              provider.isSleepTimerActive ? Icons.timer : Icons.timer_outlined,
-              color: provider.isSleepTimerActive ? colorScheme.primary : null,
-            ),
-            onPressed: () => _showSleepTimerDialog(context, provider),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsUI()),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Stack(
+    return PopScope(
+      // Prevent pop (app exit) if the player is currently expanded
+      canPop: _playerSlideController.isDismissed,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        if (!_playerSlideController.isDismissed) {
+          _playerSlideController.reverse();
+        }
+      },
+      child: Stack(
         children: [
-          Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 8.0,
+          // 1. Background Content (Main Screen)
+          Scaffold(
+            backgroundColor: colorScheme.surface,
+            appBar: AppBar(
+              title: const Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'H',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    TextSpan(text: 'alo '),
+                    TextSpan(
+                      text: 'M',
+                      style: TextStyle(color: Colors.blue),
+                    ),
+                    TextSpan(text: 'usic'),
+                  ],
                 ),
-                child: _buildTopControlBar(context, provider),
               ),
-              Expanded(
-                child: !provider.hasPermission
-                    ? _buildPermissionDeniedView(l10n)
-                    : provider.songs.isEmpty
-                    ? Center(child: Text(l10n.noSongsFound))
-                    : ListView.builder(
-                        padding: EdgeInsets.only(
-                          bottom: currentSong != null ? 160 : 20,
-                        ),
-                        itemCount: provider.songs.length,
-                        itemBuilder: (context, index) {
-                          final song = provider.songs[index];
-                          return _CachedSongTile(
-                            song: song,
-                            onTap: () => provider.playSong(index),
-                            onLongPress: () => _showAddToPlaylistDialog(
-                              context,
-                              provider,
-                              song,
-                            ),
-                          );
-                        },
+              centerTitle: false,
+              actions: [
+                IconButton(
+                  icon: Icon(
+                    provider.isSleepTimerActive
+                        ? Icons.timer
+                        : Icons.timer_outlined,
+                    color: provider.isSleepTimerActive
+                        ? colorScheme.primary
+                        : null,
+                  ),
+                  onPressed: () => _showSleepTimerDialog(context, provider),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingsUI()),
+                    );
+                  },
+                ),
+              ],
+            ),
+            body: Stack(
+              children: [
+                Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 8.0,
                       ),
-              ),
-            ],
+                      child: _buildTopControlBar(context, provider),
+                    ),
+                    Expanded(
+                      child: !provider.hasPermission
+                          ? _buildPermissionDeniedView(l10n)
+                          : provider.songs.isEmpty
+                          ? Center(child: Text(l10n.noSongsFound))
+                          : ListView.builder(
+                              padding: EdgeInsets.only(
+                                bottom: currentSong != null ? 160 : 20,
+                              ),
+                              itemCount: provider.songs.length,
+                              itemBuilder: (context, index) {
+                                final song = provider.songs[index];
+                                return _CachedSongTile(
+                                  song: song,
+                                  onTap: () => provider.playSong(index),
+                                  onLongPress: () => _showAddToPlaylistDialog(
+                                    context,
+                                    provider,
+                                    song,
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+
+                if (currentSong != null)
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: SafeArea(
+                      top: false,
+                      child: _buildMiniPlayer(context, provider, currentSong),
+                    ),
+                  ),
+              ],
+            ),
           ),
 
+          // 2. Foreground Persistent Player UI
           if (currentSong != null)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: SafeArea(
-                top: false,
-                child: _buildMiniPlayer(context, provider, currentSong),
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _playerSlideController,
+                builder: (context, child) {
+                  // Offstage hides it entirely when fully collapsed to save performance
+                  return Offstage(
+                    offstage: _playerSlideController.isDismissed,
+                    child: SlideTransition(
+                      position:
+                          Tween<Offset>(
+                            begin: const Offset(
+                              0.0,
+                              1.0,
+                            ), // Starts below the screen
+                            end: Offset.zero, // Ends exactly on screen
+                          ).animate(
+                            CurvedAnimation(
+                              parent: _playerSlideController,
+                              curve: Curves.easeOutCubic,
+                              reverseCurve: Curves.easeInCubic,
+                            ),
+                          ),
+                      child: child,
+                    ),
+                  );
+                },
+                child: PlayerUI(
+                  onMinimize: () {
+                    _playerSlideController.reverse();
+                  },
+                ),
               ),
             ),
         ],
@@ -313,31 +387,8 @@ class _MusicListScreenState extends State<MusicListScreen> {
 
     return GestureDetector(
       onTap: () {
-        // Updated to use a vertical slide transition
-        Navigator.push(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const PlayerUI(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-                  const begin = Offset(0.0, 1.0); // Start from bottom
-                  const end = Offset.zero; // End at top (normal position)
-                  const curve = Curves.easeOutCubic;
-
-                  var tween = Tween(
-                    begin: begin,
-                    end: end,
-                  ).chain(CurveTween(curve: curve));
-                  var offsetAnimation = animation.drive(tween);
-
-                  return SlideTransition(
-                    position: offsetAnimation,
-                    child: child,
-                  );
-                },
-          ),
-        );
+        // Just trigger the slide animation instead of rebuilding via Navigator
+        _playerSlideController.forward();
       },
       child: Container(
         height: 72,

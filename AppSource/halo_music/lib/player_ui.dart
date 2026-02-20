@@ -13,7 +13,9 @@ import 'song_cover.dart';
 import 'bars_effect.dart';
 
 class PlayerUI extends StatefulWidget {
-  const PlayerUI({super.key});
+  final VoidCallback onMinimize;
+
+  const PlayerUI({super.key, required this.onMinimize});
 
   @override
   State<PlayerUI> createState() => _PlayerUIState();
@@ -192,17 +194,18 @@ class _PlayerUIState extends State<PlayerUI> {
     return GestureDetector(
       onVerticalDragEnd: (details) {
         if (details.primaryVelocity != null && details.primaryVelocity! > 300) {
-          Navigator.pop(context);
+          widget.onMinimize();
         }
       },
       child: Scaffold(
+        backgroundColor: Colors.transparent, // Prevents solid color flashes
         extendBodyBehindAppBar: true,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+            onPressed: widget.onMinimize,
           ),
         ),
         body: Stack(
@@ -217,19 +220,24 @@ class _PlayerUIState extends State<PlayerUI> {
                 key: ValueKey(song.id),
                 width: double.infinity,
                 height: double.infinity,
-                child: Transform.scale(
-                  scale: 3.5,
-                  child: ImageFiltered(
-                    imageFilter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                    child: QueryArtworkWidget(
-                      id: song.id,
-                      type: ArtworkType.AUDIO,
-                      artworkFit: BoxFit.cover,
-                      size: 150,
-                      quality: 50,
-                      keepOldArtwork: true,
-                      nullArtworkWidget: Container(
-                        color: colorScheme.primaryContainer,
+                child: ClipRect(
+                  // Prevents blur from bleeding outside bounds during animation
+                  child: Transform.scale(
+                    scale:
+                        1.2, // Reduced scale to keep it strictly near screen bounds
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(sigmaX: 25.0, sigmaY: 25.0),
+                      child: QueryArtworkWidget(
+                        id: song.id,
+                        type: ArtworkType.AUDIO,
+                        artworkFit: BoxFit
+                            .cover, // Ensures image fills bounds naturally
+                        size: 300,
+                        quality: 50,
+                        keepOldArtwork: true,
+                        nullArtworkWidget: Container(
+                          color: colorScheme.primaryContainer,
+                        ),
                       ),
                     ),
                   ),
