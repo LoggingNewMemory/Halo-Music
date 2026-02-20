@@ -1,10 +1,10 @@
 import 'dart:io';
-import 'dart:typed_data';
-import 'dart:ui';
+import 'dart:math' as math;
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import 'dart:ui';
 import 'main.dart';
 
 class PlayerUI extends StatefulWidget {
@@ -29,17 +29,17 @@ class _PlayerUIState extends State<PlayerUI> {
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 30,
+              offset: const Offset(0, 15),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(8),
           child: QueryArtworkWidget(
             id: songId,
             type: ArtworkType.AUDIO,
@@ -87,58 +87,63 @@ class _PlayerUIState extends State<PlayerUI> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Container(color: colorScheme.surfaceContainer),
+          // 1. Solid base to prevent transparency bleed
+          Container(color: Colors.black),
+
+          // 2. High-Performance Blur Background
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 600),
-            // Stack the new background on top of the old one to prevent transparent flickering
-            layoutBuilder:
-                (Widget? currentChild, List<Widget> previousChildren) {
-                  return Stack(
-                    fit: StackFit.expand,
-                    alignment: Alignment.center,
-                    children: <Widget>[
-                      ...previousChildren,
-                      if (currentChild != null) currentChild,
-                    ],
-                  );
-                },
-            transitionBuilder: (Widget child, Animation<double> animation) {
-              return FadeTransition(opacity: animation, child: child);
-            },
             child: SizedBox(
               key: ValueKey(song.id),
               width: double.infinity,
               height: double.infinity,
               child: Transform.scale(
-                scale: 1.2,
+                scale: 3.5, // Scale up a tiny image
                 child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
+                  imageFilter: ImageFilter.blur(
+                    sigmaX: 12.0,
+                    sigmaY: 12.0,
+                  ), // Lower sigma = faster
                   child: QueryArtworkWidget(
                     id: song.id,
                     type: ArtworkType.AUDIO,
                     artworkFit: BoxFit.cover,
-                    size: 400,
-                    quality: 100,
-                    keepOldArtwork:
-                        true, // Added to prevent null artwork flashes
-                    nullArtworkWidget: Container(color: Colors.transparent),
+                    size:
+                        150, // Massive optimization: Load a very low-res version to blur
+                    quality: 50,
+                    keepOldArtwork: true,
+                    nullArtworkWidget: Container(
+                      color: colorScheme.primaryContainer,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
+
+          // 3. Floating Shape Visualizer Overlay
+          _ShapeVisualizer(
+            colorScheme: colorScheme,
+            playbackStream: provider.playbackStateStream,
+          ),
+
+          // 4. Gradient overlay to ensure text readability
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  colorScheme.primary.withOpacity(0.2),
-                  Colors.black.withOpacity(0.8),
+                  Colors.black.withOpacity(0.4),
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.9),
                 ],
+                stops: const [0.0, 0.4, 1.0],
               ),
             ),
           ),
+
+          // 5. Foreground UI
           Column(
             children: [
               const SizedBox(height: 100),
@@ -270,7 +275,6 @@ class _PlayerUIState extends State<PlayerUI> {
                       const SizedBox(height: 16),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
-                        // Also apply layoutBuilder to text to stop vertical jumping during switch
                         layoutBuilder:
                             (
                               Widget? currentChild,
@@ -430,6 +434,178 @@ class _PlayerUIState extends State<PlayerUI> {
     );
   }
 }
+
+// ==========================================
+// NEW FLOATING SHAPES VISUALIZER COMPONENT
+// ==========================================
+class _ShapeVisualizer extends StatefulWidget {
+  final ColorScheme colorScheme;
+  final Stream<PlaybackState> playbackStream;
+
+  const _ShapeVisualizer({
+    required this.colorScheme,
+    required this.playbackStream,
+  });
+
+  @override
+  State<_ShapeVisualizer> createState() => _ShapeVisualizerState();
+}
+
+class _ShapeVisualizerState extends State<_ShapeVisualizer>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // 12 second continuous loop for organic floating
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 12),
+    );
+
+    widget.playbackStream.listen((state) {
+      if (mounted) {
+        if (state.playing) {
+          _controller.repeat();
+        } else {
+          _controller.stop();
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Colors.white.withOpacity(0.25);
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final t = _controller.value;
+        // Use sine and cosine waves to create organic floating movements
+        return Stack(
+          children: [
+            // Top Left: Triangle
+            Positioned(
+              top: 150 + (math.sin(t * 2 * math.pi) * 20),
+              left: 60 + (math.cos(t * 2 * math.pi) * 15),
+              child: Transform.rotate(
+                angle: t * 2 * math.pi,
+                child: CustomPaint(
+                  size: const Size(60, 60),
+                  painter: _WireframePainter(
+                    color: color,
+                    shapeType: _ShapeType.triangle,
+                  ),
+                ),
+              ),
+            ),
+            // Top Right: Tilted Square
+            Positioned(
+              top: 120 + (math.cos(t * 2 * math.pi + 1) * 25),
+              right: 80 + (math.sin(t * 2 * math.pi + 1) * 20),
+              child: Transform.rotate(
+                angle: -(t * 2 * math.pi) + 0.5,
+                child: CustomPaint(
+                  size: const Size(55, 55),
+                  painter: _WireframePainter(
+                    color: color,
+                    shapeType: _ShapeType.square,
+                  ),
+                ),
+              ),
+            ),
+            // Middle Left: Circle
+            Positioned(
+              top: 300 + (math.sin(t * 2 * math.pi + 2) * 15),
+              left: 40 + (math.cos(t * 2 * math.pi + 2) * 10),
+              child: Transform.scale(
+                scale: 1.0 + (math.sin(t * 4 * math.pi) * 0.1), // Gentle pulse
+                child: CustomPaint(
+                  size: const Size(65, 65),
+                  painter: _WireframePainter(
+                    color: color,
+                    shapeType: _ShapeType.circle,
+                  ),
+                ),
+              ),
+            ),
+            // Mid Bottom: Diamond
+            Positioned(
+              top: 450 + (math.cos(t * 2 * math.pi + 3) * 30),
+              left: 100 + (math.sin(t * 2 * math.pi + 3) * 20),
+              child: Transform.rotate(
+                angle:
+                    (t * 2 * math.pi) + (math.pi / 4), // Kept in diamond shape
+                child: CustomPaint(
+                  size: const Size(50, 50),
+                  painter: _WireframePainter(
+                    color: color,
+                    shapeType:
+                        _ShapeType.square, // Square rotated 45deg is a diamond
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+enum _ShapeType { triangle, square, circle }
+
+class _WireframePainter extends CustomPainter {
+  final Color color;
+  final _ShapeType shapeType;
+
+  _WireframePainter({required this.color, required this.shapeType});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeJoin = StrokeJoin.round;
+
+    switch (shapeType) {
+      case _ShapeType.triangle:
+        final path = Path()
+          ..moveTo(size.width / 2, 0)
+          ..lineTo(size.width, size.height)
+          ..lineTo(0, size.height)
+          ..close();
+        canvas.drawPath(path, paint);
+        break;
+      case _ShapeType.square:
+        canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+        break;
+      case _ShapeType.circle:
+        canvas.drawCircle(
+          Offset(size.width / 2, size.height / 2),
+          size.width / 2,
+          paint,
+        );
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ==========================================
+// EXISTING UI COMPONENTS (Unchanged)
+// ==========================================
 
 class MarqueeWidget extends StatefulWidget {
   final Widget child;
