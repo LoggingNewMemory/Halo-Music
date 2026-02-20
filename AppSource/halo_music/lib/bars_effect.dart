@@ -3,12 +3,12 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
 class BarsVisualizer extends StatefulWidget {
-  final ColorScheme colorScheme;
+  final Color color;
   final Stream<PlaybackState> playbackStream;
 
   const BarsVisualizer({
     super.key,
-    required this.colorScheme,
+    required this.color,
     required this.playbackStream,
   });
 
@@ -54,7 +54,8 @@ class _BarsVisualizerState extends State<BarsVisualizer>
           size: Size.infinite,
           painter: _BarsPainter(
             t: _controller.value,
-            color: widget.colorScheme.primary.withOpacity(0.3),
+            // Removed .withOpacity(0.5) so it exactly matches the play button!
+            color: widget.color,
           ),
         );
       },
@@ -79,20 +80,18 @@ class _BarsPainter extends CustomPainter {
     final barWidth = spacing * 0.6;
     final maxHeight = size.height * 0.4;
 
-    final beat = math.sin(t * math.pi * 2); // Simulates rapid tempo
+    final beat = math.sin(t * math.pi * 2);
 
     for (int i = 0; i < barCount; i++) {
-      // Create a pseudo-random EQ curve that shifts over time
       final frequencyCurve = math.sin(i * 0.5 + t * math.pi * 4) * 0.5 + 0.5;
       final fastNoise = math.cos(i * 1.2 - t * math.pi * 8) * 0.5 + 0.5;
 
-      // Combine curves and apply the "beat" intensity
       final normalizedHeight =
           (frequencyCurve * 0.6 + fastNoise * 0.4) * (0.5 + (beat.abs() * 0.5));
       final barHeight = 10.0 + (normalizedHeight * maxHeight);
 
       final x = (i * spacing) + (spacing - barWidth) / 2;
-      final y = size.height - barHeight; // Draw from bottom up
+      final y = size.height - barHeight;
 
       canvas.drawRRect(
         RRect.fromRectAndRadius(

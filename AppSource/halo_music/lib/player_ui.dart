@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+import 'dart:typed_data';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,10 +10,7 @@ import 'package:headphones_detection/headphones_detection.dart';
 
 import 'main.dart';
 import 'song_cover.dart';
-import 'visualizers/visualizer_settings.dart';
-import 'visualizers/cube_effect.dart';
-import 'visualizers/bars_effect.dart';
-import 'visualizers/wave_effect.dart';
+import 'bars_effect.dart';
 
 class PlayerUI extends StatefulWidget {
   const PlayerUI({super.key});
@@ -25,11 +23,46 @@ class _PlayerUIState extends State<PlayerUI> {
   PageController? _pageController;
   Timer? _debounce;
 
+  Color? _visualizerColor;
+  int? _lastProcessedSongId;
+
   @override
   void dispose() {
     _pageController?.dispose();
     _debounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _extractDominantColor(int songId, Color fallbackColor) async {
+    try {
+      final Uint8List? art = await OnAudioQuery().queryArtwork(
+        songId,
+        ArtworkType.AUDIO,
+        size: 200,
+      );
+
+      if (art != null && mounted) {
+        final imageProvider = MemoryImage(art);
+        final scheme = await ColorScheme.fromImageProvider(
+          provider: imageProvider,
+        );
+        if (mounted && _lastProcessedSongId == songId) {
+          setState(() {
+            _visualizerColor = scheme.primary;
+          });
+        }
+      } else if (mounted && _lastProcessedSongId == songId) {
+        setState(() {
+          _visualizerColor = fallbackColor;
+        });
+      }
+    } catch (e) {
+      if (mounted && _lastProcessedSongId == songId) {
+        setState(() {
+          _visualizerColor = fallbackColor;
+        });
+      }
+    }
   }
 
   @override
@@ -39,6 +72,14 @@ class _PlayerUIState extends State<PlayerUI> {
     final colorScheme = Theme.of(context).colorScheme;
 
     if (song == null) return const SizedBox.shrink();
+
+    // Trigger color extraction if the song changes
+    if (song.id != _lastProcessedSongId) {
+      _lastProcessedSongId = song.id;
+      _extractDominantColor(song.id, colorScheme.primary);
+    }
+
+    final activeVisualizerColor = _visualizerColor ?? colorScheme.primary;
 
     const textColor = Colors.white;
     const secondaryTextColor = Colors.white70;
@@ -85,21 +126,11 @@ class _PlayerUIState extends State<PlayerUI> {
             ),
           ),
 
-          // DYNAMIC VISUALIZER LISTENER
-          ValueListenableBuilder<String>(
-            valueListenable: VisualizerSettings.instance,
-            builder: (context, visualizerType, child) {
-              return AnimatedSwitcher(
-                duration: const Duration(milliseconds: 500),
-                child: _buildActiveVisualizer(
-                  visualizerType,
-                  colorScheme,
-                  provider.playbackStateStream,
-                ),
-              );
-            },
+          // BARS VISUALIZER
+          BarsVisualizer(
+            color: activeVisualizerColor,
+            playbackStream: provider.playbackStateStream,
           ),
-
           // Gradient overlay for text readability
           Container(
             decoration: BoxDecoration(
@@ -332,7 +363,7 @@ class _PlayerUIState extends State<PlayerUI> {
                       _PlayerSlider(
                         duration: Duration(milliseconds: song.duration ?? 0),
                         audioHandler: provider.audioHandler,
-                        colorScheme: colorScheme,
+                        activeColor: activeVisualizerColor,
                       ),
                       const SizedBox(height: 24),
                       StreamBuilder<PlaybackState>(
@@ -355,7 +386,7 @@ class _PlayerUIState extends State<PlayerUI> {
                                   Icons.shuffle,
                                   color:
                                       shuffleMode == AudioServiceShuffleMode.all
-                                      ? colorScheme.primary
+                                      ? activeVisualizerColor
                                       : Colors.white60,
                                 ),
                                 onPressed: provider.toggleShuffle,
@@ -373,7 +404,7 @@ class _PlayerUIState extends State<PlayerUI> {
                                 width: 72,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: colorScheme.primaryContainer,
+                                  color: activeVisualizerColor,
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.2),
@@ -389,7 +420,7 @@ class _PlayerUIState extends State<PlayerUI> {
                                     playing
                                         ? Icons.pause_rounded
                                         : Icons.play_arrow_rounded,
-                                    color: colorScheme.onPrimaryContainer,
+                                    color: Colors.white,
                                   ),
                                   onPressed: provider.togglePlay,
                                 ),
@@ -409,7 +440,7 @@ class _PlayerUIState extends State<PlayerUI> {
                                       : Icons.repeat_rounded,
                                   color:
                                       repeatMode != AudioServiceRepeatMode.none
-                                      ? colorScheme.primary
+                                      ? activeVisualizerColor
                                       : Colors.white60,
                                 ),
                                 onPressed: provider.toggleLoop,
@@ -429,40 +460,10 @@ class _PlayerUIState extends State<PlayerUI> {
       ),
     );
   }
-
-  Widget _buildActiveVisualizer(
-    String type,
-    ColorScheme colorScheme,
-    Stream<PlaybackState> stream,
-  ) {
-    switch (type) {
-      case 'cube':
-        return CubeEqualizer(
-          key: const ValueKey('cube'),
-          colorScheme: colorScheme,
-          playbackStream: stream,
-        );
-      case 'bars':
-        return BarsVisualizer(
-          key: const ValueKey('bars'),
-          colorScheme: colorScheme,
-          playbackStream: stream,
-        );
-      case 'wave':
-        return WaveVisualizer(
-          key: const ValueKey('wave'),
-          colorScheme: colorScheme,
-          playbackStream: stream,
-        );
-      case 'none':
-      default:
-        return const SizedBox.shrink(key: ValueKey('none'));
-    }
-  }
 }
 
 // ============================================================================
-// Helper Widgets below (Untouched from original)
+// Helper Widgets below
 // ============================================================================
 
 class MarqueeWidget extends StatefulWidget {
@@ -789,12 +790,12 @@ class _FormatBadgeState extends State<_FormatBadge> {
 class _PlayerSlider extends StatefulWidget {
   final Duration duration;
   final AudioHandler audioHandler;
-  final ColorScheme colorScheme;
+  final Color activeColor;
 
   const _PlayerSlider({
     required this.duration,
     required this.audioHandler,
-    required this.colorScheme,
+    required this.activeColor,
   });
 
   @override
@@ -824,11 +825,11 @@ class _PlayerSliderState extends State<_PlayerSlider> {
           children: [
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
-                activeTrackColor: widget.colorScheme.primary,
+                activeTrackColor: widget.activeColor,
                 inactiveTrackColor: Colors.white24,
                 thumbColor: Colors.white,
                 trackHeight: 4.0,
-                overlayColor: widget.colorScheme.primary.withOpacity(0.2),
+                overlayColor: widget.activeColor.withOpacity(0.2),
                 thumbShape: const RoundSliderThumbShape(
                   enabledThumbRadius: 6.0,
                 ),
