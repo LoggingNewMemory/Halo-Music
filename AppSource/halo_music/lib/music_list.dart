@@ -68,7 +68,7 @@ class _MusicListScreenState extends State<MusicListScreen>
       onPopInvoked: (didPop) {
         if (didPop) return;
         if (!_playerSlideController.isDismissed) {
-          _playerSlideController.reverse();
+          _playerSlideController.animateTo(0.0, curve: Curves.easeInCubic);
         }
       },
       child: Stack(
@@ -175,32 +175,51 @@ class _MusicListScreenState extends State<MusicListScreen>
               child: AnimatedBuilder(
                 animation: _playerSlideController,
                 builder: (context, child) {
-                  // Offstage hides it entirely when fully collapsed to save performance
                   return Offstage(
                     offstage: _playerSlideController.isDismissed,
                     child: SlideTransition(
                       position:
                           Tween<Offset>(
-                            begin: const Offset(
-                              0.0,
-                              1.0,
-                            ), // Starts below the screen
-                            end: Offset.zero, // Ends exactly on screen
+                            begin: const Offset(0.0, 1.0),
+                            end: Offset.zero,
                           ).animate(
-                            CurvedAnimation(
-                              parent: _playerSlideController,
-                              curve: Curves.easeOutCubic,
-                              reverseCurve: Curves.easeInCubic,
-                            ),
-                          ),
+                            _playerSlideController,
+                          ), // Direct linear mapping for 1:1 finger tracking
                       child: child,
                     ),
                   );
                 },
-                child: PlayerUI(
-                  onMinimize: () {
-                    _playerSlideController.reverse();
+                child: GestureDetector(
+                  onVerticalDragUpdate: (details) {
+                    final dy = details.primaryDelta ?? 0;
+                    final height = MediaQuery.of(context).size.height;
+                    // Decrease controller value as user drags down
+                    _playerSlideController.value -= dy / height;
                   },
+                  onVerticalDragEnd: (details) {
+                    final velocity = details.primaryVelocity ?? 0;
+                    // Snap closed if swiped fast or dragged more than 25% down
+                    if (velocity > 300 || _playerSlideController.value < 0.75) {
+                      _playerSlideController.animateTo(
+                        0.0,
+                        curve: Curves.easeInCubic,
+                      );
+                    } else {
+                      // Snap back open
+                      _playerSlideController.animateTo(
+                        1.0,
+                        curve: Curves.easeOutCubic,
+                      );
+                    }
+                  },
+                  child: PlayerUI(
+                    onMinimize: () {
+                      _playerSlideController.animateTo(
+                        0.0,
+                        curve: Curves.easeInCubic,
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
@@ -387,8 +406,8 @@ class _MusicListScreenState extends State<MusicListScreen>
 
     return GestureDetector(
       onTap: () {
-        // Just trigger the slide animation instead of rebuilding via Navigator
-        _playerSlideController.forward();
+        // Trigger the slide animation up
+        _playerSlideController.animateTo(1.0, curve: Curves.easeOutCubic);
       },
       child: Container(
         height: 72,
