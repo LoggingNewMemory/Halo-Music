@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:audio_service/audio_service.dart';
@@ -17,10 +18,12 @@ class PlayerUI extends StatefulWidget {
 
 class _PlayerUIState extends State<PlayerUI> {
   PageController? _pageController;
+  Timer? _debounce;
 
   @override
   void dispose() {
     _pageController?.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
@@ -48,10 +51,9 @@ class _PlayerUIState extends State<PlayerUI> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Solid base to prevent transparency bleed
           Container(color: Colors.black),
 
-          // 2. High-Performance Blur Background
+          // The Blur is back!
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 600),
             child: SizedBox(
@@ -78,13 +80,10 @@ class _PlayerUIState extends State<PlayerUI> {
             ),
           ),
 
-          // 3. Floating Shape Visualizer Overlay (Using separated file)
           CubeEqualizer(
             colorScheme: colorScheme,
             playbackStream: provider.playbackStateStream,
           ),
-
-          // 4. Gradient overlay
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -99,8 +98,6 @@ class _PlayerUIState extends State<PlayerUI> {
               ),
             ),
           ),
-
-          // 5. Foreground UI
           Column(
             children: [
               const SizedBox(height: 100),
@@ -117,7 +114,6 @@ class _PlayerUIState extends State<PlayerUI> {
                     if (queue.isEmpty || currentIndex == -1) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        // Replaced method with separated widget
                         child: SongCover(
                           songId: song.id,
                           colorScheme: colorScheme,
@@ -157,7 +153,15 @@ class _PlayerUIState extends State<PlayerUI> {
                       itemCount: queue.length,
                       onPageChanged: (index) {
                         if (index != currentIndex) {
-                          provider.audioHandler.skipToQueueItem(index);
+                          if (_debounce?.isActive ?? false) {
+                            _debounce!.cancel();
+                          }
+                          _debounce = Timer(
+                            const Duration(milliseconds: 300),
+                            () {
+                              provider.audioHandler.skipToQueueItem(index);
+                            },
+                          );
                         }
                       },
                       itemBuilder: (context, index) {
@@ -206,7 +210,6 @@ class _PlayerUIState extends State<PlayerUI> {
                               ),
                             );
                           },
-                          // Replaced method with separated widget
                           child: SongCover(
                             songId: songId,
                             colorScheme: colorScheme,
@@ -399,10 +402,6 @@ class _PlayerUIState extends State<PlayerUI> {
     );
   }
 }
-
-// ---------------------------------------------------------
-// Helper Classes (Left in player_ui.dart to keep them scoped)
-// ---------------------------------------------------------
 
 class MarqueeWidget extends StatefulWidget {
   final Widget child;

@@ -28,10 +28,10 @@ class SongCover extends StatelessWidget {
           child: QueryArtworkWidget(
             id: songId,
             type: ArtworkType.AUDIO,
-            artworkHeight: 500,
-            artworkWidth: 500,
-            size: 1000,
-            quality: 100,
+            artworkHeight: 400,
+            artworkWidth: 400,
+            size: 400,
+            quality: 70,
             keepOldArtwork: true,
             artworkBorder: BorderRadius.circular(10),
             nullArtworkWidget: Container(
