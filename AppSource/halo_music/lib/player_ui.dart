@@ -1,11 +1,12 @@
 import 'dart:io';
-import 'dart:math' as math;
+import 'dart:ui';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:on_audio_query/on_audio_query.dart';
-import 'dart:ui';
 import 'main.dart';
+import 'song_cover.dart';
+import 'cube_effect.dart';
 
 class PlayerUI extends StatefulWidget {
   const PlayerUI({super.key});
@@ -21,46 +22,6 @@ class _PlayerUIState extends State<PlayerUI> {
   void dispose() {
     _pageController?.dispose();
     super.dispose();
-  }
-
-  Widget _buildArtworkCard(int songId, ColorScheme colorScheme) {
-    return AspectRatio(
-      aspectRatio: 1,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.5),
-              blurRadius: 30,
-              offset: const Offset(0, 15),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: QueryArtworkWidget(
-            id: songId,
-            type: ArtworkType.AUDIO,
-            artworkHeight: 500,
-            artworkWidth: 500,
-            size: 1000,
-            quality: 100,
-            keepOldArtwork: true,
-            artworkBorder: BorderRadius.circular(10),
-            nullArtworkWidget: Container(
-              color: colorScheme.surfaceContainerHighest,
-              child: Icon(
-                Icons.music_note,
-                size: 120,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -98,18 +59,14 @@ class _PlayerUIState extends State<PlayerUI> {
               width: double.infinity,
               height: double.infinity,
               child: Transform.scale(
-                scale: 3.5, // Scale up a tiny image
+                scale: 3.5,
                 child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(
-                    sigmaX: 12.0,
-                    sigmaY: 12.0,
-                  ), // Lower sigma = faster
+                  imageFilter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
                   child: QueryArtworkWidget(
                     id: song.id,
                     type: ArtworkType.AUDIO,
                     artworkFit: BoxFit.cover,
-                    size:
-                        150, // Massive optimization: Load a very low-res version to blur
+                    size: 150,
                     quality: 50,
                     keepOldArtwork: true,
                     nullArtworkWidget: Container(
@@ -121,13 +78,13 @@ class _PlayerUIState extends State<PlayerUI> {
             ),
           ),
 
-          // 3. Floating Shape Visualizer Overlay
-          _ShapeVisualizer(
+          // 3. Floating Shape Visualizer Overlay (Using separated file)
+          CubeEqualizer(
             colorScheme: colorScheme,
             playbackStream: provider.playbackStateStream,
           ),
 
-          // 4. Gradient overlay to ensure text readability
+          // 4. Gradient overlay
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -160,7 +117,11 @@ class _PlayerUIState extends State<PlayerUI> {
                     if (queue.isEmpty || currentIndex == -1) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: _buildArtworkCard(song.id, colorScheme),
+                        // Replaced method with separated widget
+                        child: SongCover(
+                          songId: song.id,
+                          colorScheme: colorScheme,
+                        ),
                       );
                     }
 
@@ -245,7 +206,11 @@ class _PlayerUIState extends State<PlayerUI> {
                               ),
                             );
                           },
-                          child: _buildArtworkCard(songId, colorScheme),
+                          // Replaced method with separated widget
+                          child: SongCover(
+                            songId: songId,
+                            colorScheme: colorScheme,
+                          ),
                         );
                       },
                     );
@@ -435,177 +400,9 @@ class _PlayerUIState extends State<PlayerUI> {
   }
 }
 
-// ==========================================
-// NEW FLOATING SHAPES VISUALIZER COMPONENT
-// ==========================================
-class _ShapeVisualizer extends StatefulWidget {
-  final ColorScheme colorScheme;
-  final Stream<PlaybackState> playbackStream;
-
-  const _ShapeVisualizer({
-    required this.colorScheme,
-    required this.playbackStream,
-  });
-
-  @override
-  State<_ShapeVisualizer> createState() => _ShapeVisualizerState();
-}
-
-class _ShapeVisualizerState extends State<_ShapeVisualizer>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    // 12 second continuous loop for organic floating
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 12),
-    );
-
-    widget.playbackStream.listen((state) {
-      if (mounted) {
-        if (state.playing) {
-          _controller.repeat();
-        } else {
-          _controller.stop();
-        }
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Colors.white.withOpacity(0.25);
-
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final t = _controller.value;
-        // Use sine and cosine waves to create organic floating movements
-        return Stack(
-          children: [
-            // Top Left: Triangle
-            Positioned(
-              top: 150 + (math.sin(t * 2 * math.pi) * 20),
-              left: 60 + (math.cos(t * 2 * math.pi) * 15),
-              child: Transform.rotate(
-                angle: t * 2 * math.pi,
-                child: CustomPaint(
-                  size: const Size(60, 60),
-                  painter: _WireframePainter(
-                    color: color,
-                    shapeType: _ShapeType.triangle,
-                  ),
-                ),
-              ),
-            ),
-            // Top Right: Tilted Square
-            Positioned(
-              top: 120 + (math.cos(t * 2 * math.pi + 1) * 25),
-              right: 80 + (math.sin(t * 2 * math.pi + 1) * 20),
-              child: Transform.rotate(
-                angle: -(t * 2 * math.pi) + 0.5,
-                child: CustomPaint(
-                  size: const Size(55, 55),
-                  painter: _WireframePainter(
-                    color: color,
-                    shapeType: _ShapeType.square,
-                  ),
-                ),
-              ),
-            ),
-            // Middle Left: Circle
-            Positioned(
-              top: 300 + (math.sin(t * 2 * math.pi + 2) * 15),
-              left: 40 + (math.cos(t * 2 * math.pi + 2) * 10),
-              child: Transform.scale(
-                scale: 1.0 + (math.sin(t * 4 * math.pi) * 0.1), // Gentle pulse
-                child: CustomPaint(
-                  size: const Size(65, 65),
-                  painter: _WireframePainter(
-                    color: color,
-                    shapeType: _ShapeType.circle,
-                  ),
-                ),
-              ),
-            ),
-            // Mid Bottom: Diamond
-            Positioned(
-              top: 450 + (math.cos(t * 2 * math.pi + 3) * 30),
-              left: 100 + (math.sin(t * 2 * math.pi + 3) * 20),
-              child: Transform.rotate(
-                angle:
-                    (t * 2 * math.pi) + (math.pi / 4), // Kept in diamond shape
-                child: CustomPaint(
-                  size: const Size(50, 50),
-                  painter: _WireframePainter(
-                    color: color,
-                    shapeType:
-                        _ShapeType.square, // Square rotated 45deg is a diamond
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-enum _ShapeType { triangle, square, circle }
-
-class _WireframePainter extends CustomPainter {
-  final Color color;
-  final _ShapeType shapeType;
-
-  _WireframePainter({required this.color, required this.shapeType});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5
-      ..strokeJoin = StrokeJoin.round;
-
-    switch (shapeType) {
-      case _ShapeType.triangle:
-        final path = Path()
-          ..moveTo(size.width / 2, 0)
-          ..lineTo(size.width, size.height)
-          ..lineTo(0, size.height)
-          ..close();
-        canvas.drawPath(path, paint);
-        break;
-      case _ShapeType.square:
-        canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
-        break;
-      case _ShapeType.circle:
-        canvas.drawCircle(
-          Offset(size.width / 2, size.height / 2),
-          size.width / 2,
-          paint,
-        );
-        break;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// ==========================================
-// EXISTING UI COMPONENTS (Unchanged)
-// ==========================================
+// ---------------------------------------------------------
+// Helper Classes (Left in player_ui.dart to keep them scoped)
+// ---------------------------------------------------------
 
 class MarqueeWidget extends StatefulWidget {
   final Widget child;
