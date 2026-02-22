@@ -10,7 +10,6 @@ import 'package:headphones_detection/headphones_detection.dart';
 
 import 'main.dart';
 import 'song_cover.dart';
-import 'bars_effect.dart';
 
 class PlayerUI extends StatefulWidget {
   final VoidCallback onMinimize;
@@ -25,7 +24,7 @@ class _PlayerUIState extends State<PlayerUI> {
   PageController? _pageController;
   Timer? _debounce;
 
-  Color? _visualizerColor;
+  Color? _uiColor;
   int? _lastProcessedSongId;
 
   @override
@@ -50,18 +49,18 @@ class _PlayerUIState extends State<PlayerUI> {
         );
         if (mounted && _lastProcessedSongId == songId) {
           setState(() {
-            _visualizerColor = scheme.primary;
+            _uiColor = scheme.primary;
           });
         }
       } else if (mounted && _lastProcessedSongId == songId) {
         setState(() {
-          _visualizerColor = fallbackColor;
+          _uiColor = fallbackColor;
         });
       }
     } catch (e) {
       if (mounted && _lastProcessedSongId == songId) {
         setState(() {
-          _visualizerColor = fallbackColor;
+          _uiColor = fallbackColor;
         });
       }
     }
@@ -186,7 +185,7 @@ class _PlayerUIState extends State<PlayerUI> {
       _extractDominantColor(song.id, colorScheme.primary);
     }
 
-    final activeVisualizerColor = _visualizerColor ?? colorScheme.primary;
+    final activeColor = _uiColor ?? colorScheme.primary;
 
     const textColor = Colors.white;
     const secondaryTextColor = Colors.white70;
@@ -237,11 +236,6 @@ class _PlayerUIState extends State<PlayerUI> {
                 ),
               ),
             ),
-          ),
-
-          BarsVisualizer(
-            color: activeVisualizerColor,
-            playbackStream: provider.playbackStateStream,
           ),
 
           Container(
@@ -487,7 +481,7 @@ class _PlayerUIState extends State<PlayerUI> {
                       _PlayerSlider(
                         duration: Duration(milliseconds: song.duration ?? 0),
                         audioHandler: provider.audioHandler,
-                        activeColor: activeVisualizerColor,
+                        activeColor: activeColor,
                       ),
                       const SizedBox(height: 24),
                       StreamBuilder<PlaybackState>(
@@ -510,7 +504,7 @@ class _PlayerUIState extends State<PlayerUI> {
                                   Icons.shuffle,
                                   color:
                                       shuffleMode == AudioServiceShuffleMode.all
-                                      ? activeVisualizerColor
+                                      ? activeColor
                                       : Colors.white60,
                                 ),
                                 onPressed: provider.toggleShuffle,
@@ -528,7 +522,7 @@ class _PlayerUIState extends State<PlayerUI> {
                                 width: 72,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: activeVisualizerColor,
+                                  color: activeColor,
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.2),
@@ -564,7 +558,7 @@ class _PlayerUIState extends State<PlayerUI> {
                                       : Icons.repeat_rounded,
                                   color:
                                       repeatMode != AudioServiceRepeatMode.none
-                                      ? activeVisualizerColor
+                                      ? activeColor
                                       : Colors.white60,
                                 ),
                                 onPressed: provider.toggleLoop,
