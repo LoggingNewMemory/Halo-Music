@@ -132,11 +132,53 @@ class MyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       (event, shuffleEnabled, loopMode) => _transformEvent(event),
     ).pipe(playbackState);
 
-    _player.currentIndexStream.listen((index) {
+    _player.currentIndexStream.listen((index) async {
       if (index != null && queue.value.isNotEmpty) {
         if (index >= 0 && index < queue.value.length) {
-          final newItem = queue.value[index];
+          var newItem = queue.value[index];
+
+          // 1. Initially emit without artwork (to update UI metadata instantly)
           mediaItem.add(newItem);
+
+          // 2. Fetch and set artwork dynamically for the notification
+          if (newItem.artUri == null) {
+            try {
+              final songId = int.parse(newItem.id);
+              final tempDir = await getTemporaryDirectory();
+              // Create a temp file to store the artwork
+              final file = File('${tempDir.path}/art_$songId.jpg');
+
+              // If the file doesn't exist yet, query it and save it
+              if (!await file.exists()) {
+                final Uint8List? bytes = await _audioQuery.queryArtwork(
+                  songId,
+                  ArtworkType.AUDIO,
+                  format: ArtworkFormat.JPEG,
+                  size: 400, // Large enough for high-res notification panels
+                  quality: 80,
+                );
+
+                if (bytes != null) {
+                  await file.writeAsBytes(bytes);
+                }
+              }
+
+              // If the file now exists, update the MediaItem with the file URI
+              if (await file.exists()) {
+                newItem = newItem.copyWith(artUri: Uri.file(file.path));
+
+                // Update the background queue
+                final newQueue = List<MediaItem>.from(queue.value);
+                newQueue[index] = newItem;
+                queue.add(newQueue);
+
+                // Re-emit the item so the notification picks up the image
+                mediaItem.add(newItem);
+              }
+            } catch (e) {
+              debugPrint("Artwork load error for notification: $e");
+            }
+          }
         }
       }
     });
@@ -362,7 +404,7 @@ class AudioProvider extends ChangeNotifier {
         title: song.title,
         artist: song.artist ?? "Unknown Artist",
         duration: Duration(milliseconds: song.duration ?? 0),
-        artUri: null,
+        artUri: null, // Artwork populated dynamically by MyAudioHandler
         extras: {'url': song.data},
       );
     }).toList();
@@ -483,7 +525,7 @@ class AudioProvider extends ChangeNotifier {
           title: song.title,
           artist: song.artist ?? "Unknown Artist",
           duration: Duration(milliseconds: song.duration ?? 0),
-          artUri: null,
+          artUri: null, // Artwork populated dynamically by MyAudioHandler
           extras: {'url': song.data},
         );
       }).toList();
@@ -563,7 +605,7 @@ class AudioProvider extends ChangeNotifier {
         title: song.title,
         artist: song.artist ?? "Unknown Artist",
         duration: Duration(milliseconds: song.duration ?? 0),
-        artUri: null,
+        artUri: null, // Artwork populated dynamically by MyAudioHandler
         extras: {'url': song.data},
       );
     }).toList();
